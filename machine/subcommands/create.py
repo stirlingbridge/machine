@@ -1,0 +1,103 @@
+
+import click
+import digitalocean
+import time
+from machine.config import get_machine
+from machine.di import d
+from machine.log import fatal_error, info, debug
+from machine.types import MainCmdCtx
+from machine.util import projectFromName, sshKeyFromName
+from machine.cloud_config import get_user_data
+
+
+@click.command(help="Create a machine")
+@click.option('--name', '-n', required=True, help="Name for new machine")
+@click.option('--tag', '-t', help="tag to be applied to new machine")
+@click.option('--type', '-m', help="create a machine of this type")
+@click.option('--wait-for-ip/--no-wait-for-up', default=False)
+@click.option('--update-dns/--no-update-dns', default=True)
+@click.option('--initialize/--no-initialize', default=True)
+@click.pass_context
+def command(context, name, tag, type, wait_for_ip, update_dns, initialize):
+    command_context: MainCmdCtx = context.obj
+    config = command_context.config
+
+    if update_dns and not config.dns_zone:
+        fatal_error("Error: DNS update requested but no zone configured")
+
+    manager = digitalocean.Manager(token=command_context.config.access_token)
+
+    if initialize:
+        if not type:
+            fatal_error("Error: a machine type must be supplied")
+        machine_config = get_machine(type)
+        if not machine_config:
+            fatal_error(f"Error: machine type {type} is not defined")
+        user_data = get_user_data(manager, config.ssh_key, machine_config)
+        if d.opt.debug:
+            info("user-data is:")
+            info(user_data)
+
+    ssh_key = sshKeyFromName(manager, config.ssh_key)
+
+    droplet = digitalocean.Droplet(token=config.access_token,
+                                   name=name,
+                                   region=config.region,
+                                   image=config.image,
+                                   size_slug=config.machine_size,
+                                   ssh_keys=[ssh_key],
+                                   tags=[tag] if tag else [],
+                                   user_data=user_data,
+                                   backups=False)
+    # Create the droplet
+    # This call returns nothing, it modifies the droplet object
+    droplet.create()
+    if droplet.id:
+        if d.opt.quiet:
+            print(f"{droplet.id}")
+        else:
+            print(f"New droplet created with id: {droplet.id}")
+    # If requested, assign to a specified project
+    if config.project:
+        project_name = config.project
+        project = projectFromName(manager, project_name)
+        if not project:
+            fatal_error(f"Error: Project {project_name} does not exist, machine created but not assigned to project")
+        project.assign_resource([f"do:droplet:{droplet.id}"])
+        if d.opt.verbose:
+            info(f"Assigned droplet to project: {project}")
+    # If requested, or if we are going to set a DNS record get the droplet's IPv4 address
+    if wait_for_ip or update_dns:
+        ip_address = None
+        while not ip_address:
+            time.sleep(1)
+            droplet.load()
+            ip_address = droplet.ip_address
+            if d.opt.verbose:
+                print("Waiting for droplet IP address")
+        if d.opt.quiet:
+            info(f"{ip_address}")
+        else:
+            info(f"IP Address: {ip_address}")
+    # If requested, and we have the IP address, create a DNS host record for the droplet
+    if update_dns and ip_address and config.dns_zone:
+        zone = config.dns_zone
+        host = name
+        if d.opt.debug:
+            debug(f"Setting host record {host}.{zone} to {ip_address}")
+        domain = digitalocean.Domain(token=config.access_token, name=zone)
+        if not domain:
+            fatal_error(f"Error: Domain {domain} does not exist, machine created but DNS record not set")
+        record = domain.create_new_domain_record(
+            type='A',
+            ttl=60*5,
+            name=host,
+            data=ip_address
+            )
+        if record:
+            if d.opt.verbose:
+                info(f"Created DNS record:{record}")
+            if not d.opt.quiet:
+                info(f"DNS: {host}.{zone}")
+        else:
+            fatal_error("Error: Failed to create DNS record")
