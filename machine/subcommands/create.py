@@ -10,15 +10,21 @@ from machine.util import projectFromName, sshKeyFromName
 from machine.cloud_config import get_user_data
 
 
+def _validate_region(region: str):
+    valid_regions = ["NYC1", "NYC3", "AMS3", "SFO2", "SFO3", "SGP1", "LON1", "FRA1", "TOR1", "BLR1", "SYD1"]
+    if region is not None and region.upper() not in valid_regions:
+        fatal_error(f"Error: region {region} is not one of {valid_regions}")
+
 @click.command(help="Create a machine")
 @click.option('--name', '-n', required=True, help="Name for new machine")
 @click.option('--tag', '-t', help="tag to be applied to new machine")
 @click.option('--type', '-m', help="create a machine of this type")
+@click.option('--region', '-r', help="create a machine in this region (overrides default from config)")
 @click.option('--wait-for-ip/--no-wait-for-up', default=False)
 @click.option('--update-dns/--no-update-dns', default=True)
 @click.option('--initialize/--no-initialize', default=True)
 @click.pass_context
-def command(context, name, tag, type, wait_for_ip, update_dns, initialize):
+def command(context, name, tag, type, region, wait_for_ip, update_dns, initialize):
     command_context: MainCmdCtx = context.obj
     config = command_context.config
 
@@ -40,9 +46,11 @@ def command(context, name, tag, type, wait_for_ip, update_dns, initialize):
 
     ssh_key = sshKeyFromName(manager, config.ssh_key)
 
+    _validate_region(region)
+
     droplet = digitalocean.Droplet(token=config.access_token,
                                    name=name,
-                                   region=config.region,
+                                   region=region if region is not None else config.region,
                                    image=config.image,
                                    size_slug=config.machine_size,
                                    ssh_keys=[ssh_key],

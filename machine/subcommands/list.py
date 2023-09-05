@@ -11,4 +11,4 @@ def command(context):
     manager = digitalocean.Manager(token=command_context.config.access_token)
     droplets = manager.get_all_droplets()
     for droplet in droplets:
-        print(f"{droplet.name} ({droplet.id}): {droplet.ip_address}")
+        print(f"{droplet.name} ({droplet.id}, {droplet.region['slug']}): {droplet.ip_address}")
