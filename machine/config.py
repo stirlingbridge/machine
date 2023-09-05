@@ -33,7 +33,7 @@ def get_machine(name: str) -> MachineConfig:
     return MachineConfig(
         target_config["new-user-name"],
         target_config["script-url"],
-        target_config["script-dir"],        
+        target_config["script-dir"],
         target_config["script-path"],
         target_config["script-args"],
     )

@@ -15,6 +15,7 @@ def _validate_region(region: str):
     if region is not None and region.upper() not in valid_regions:
         fatal_error(f"Error: region {region} is not one of {valid_regions}")
 
+
 @click.command(help="Create a machine")
 @click.option('--name', '-n', required=True, help="Name for new machine")
 @click.option('--tag', '-t', help="tag to be applied to new machine")
