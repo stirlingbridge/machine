@@ -16,16 +16,27 @@ def _validate_region(region: str):
         fatal_error(f"Error: region {region} is not one of {valid_regions}")
 
 
+def _validate_image(image: str):
+    valid_images = ["almalinux-8-x64", "almalinux-9-x64", "centos-stream-9-x64", "debian-11-x64", "debian-12-x64",
+                    "fedora-39-x64", "fedora-40-x64", "rockylinux-9-x64", "rockylinux-8-x64", "ubuntu-20-04-x64",
+                    "ubuntu-22-04-x64", "ubuntu-24-04-x64"]
+    if image is not None and image not in valid_images:
+        info(f"Warning: image {image} is not one of these known valid images: {valid_images}")
+
+
 @click.command(help="Create a machine")
-@click.option('--name', '-n', required=True, help="Name for new machine")
-@click.option('--tag', '-t', help="tag to be applied to new machine")
-@click.option('--type', '-m', help="create a machine of this type")
-@click.option('--region', '-r', help="create a machine in this region (overrides default from config)")
+@click.option('--name', '-n', required=True, metavar="<MACHINE-NAME>", help="Name for new machine")
+@click.option('--tag', '-t', metavar="<TAG-TEXT>", help="tag to be applied to new machine")
+@click.option('--type', '-m', metavar="<MACHINE-TYPE>", help="create a machine of this type")
+@click.option('--region', '-r', metavar="<REGION-CODE>", help="create a machine in this region (overrides default from config)")
+@click.option('--machine-size', '-s', metavar="<MACHINE-SLUG>",
+              help="create a machine of this size (overrides default from config)")
+@click.option('--image', '-s', metavar="<IMAGE-NAME>", help="create a machine from this image (overrides default from config)")
 @click.option('--wait-for-ip/--no-wait-for-up', default=False)
 @click.option('--update-dns/--no-update-dns', default=True)
 @click.option('--initialize/--no-initialize', default=True)
 @click.pass_context
-def command(context, name, tag, type, region, wait_for_ip, update_dns, initialize):
+def command(context, name, tag, type, region, machine_size, image, wait_for_ip, update_dns, initialize):
     command_context: MainCmdCtx = context.obj
     config = command_context.config
 
@@ -48,12 +59,13 @@ def command(context, name, tag, type, region, wait_for_ip, update_dns, initializ
     ssh_key = sshKeyFromName(manager, config.ssh_key)
 
     _validate_region(region)
+    _validate_image(image)
 
     droplet = digitalocean.Droplet(token=config.access_token,
                                    name=name,
                                    region=region if region is not None else config.region,
-                                   image=config.image,
-                                   size_slug=config.machine_size,
+                                   image=image if image is not None else config.image,
+                                   size_slug=machine_size if machine_size is not None else config.machine_size,
                                    ssh_keys=[ssh_key],
                                    tags=[tag] if tag else [],
                                    user_data=user_data,

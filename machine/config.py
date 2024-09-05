@@ -8,8 +8,10 @@ from machine.log import fatal_error, debug
 from machine.types import Config, MachineConfig
 from machine import constants
 
+
 class _loaded_config:
     c: any = None
+
 
 def _load_config_data(config_file_name: str):
     if not config_file_name:
