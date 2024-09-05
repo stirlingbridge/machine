@@ -14,7 +14,7 @@ CLICK_CONTEXT_SETTINGS = dict(help_option_names=['-h', '--help'])
 @click.option("--quiet", is_flag=True, default=False, help="Suppress all non-essential output")
 @click.option("--verbose", is_flag=True, default=False, help="Enable verbose output")
 @click.option("--dry-run", is_flag=True, default=False, help="Run but do not do anything")
-@click.option("--config-file", metavar="<PATH>",help=f"Specify the config file (default {constants.default_config_file_path})")
+@click.option("--config-file", metavar="<PATH>", help=f"Specify the config file (default {constants.default_config_file_path})")
 @click.pass_context
 def main(context, debug, quiet, verbose, dry_run, config_file):
     options = CliOptions(debug, quiet, verbose, dry_run)
