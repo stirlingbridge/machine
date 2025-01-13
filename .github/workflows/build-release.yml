@@ -1,0 +1,29 @@
+name: Build and Release
+
+on:
+  push:
+    branches:
+      - main
+      - build-test
+      - add-ci
+
+jobs:
+  publish:
+    name: "Build and Release"
+    runs-on: ubuntu-latest
+    steps:
+      - name: "Clone project repository"
+        uses: actions/checkout@v3
+      - name: "Install Python"
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.8'
+      - name: "Install shiv"
+        run: pip install shiv
+      - name: "Build shiv package"
+        run: |
+          ./sh/build-package.sh
+      - name: "Upload package as a github release"
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ./build/machine
