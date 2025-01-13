@@ -20,10 +20,17 @@ jobs:
           python-version: '3.8'
       - name: "Install shiv"
         run: pip install shiv
+      - name: "Get release tag"
+        id: release-tag
+        run: |
+          release_tag=$(./sh/make-release-tag.sh)
+          echo "release-tag=v${release_tag}" >> $GITHUB_OUTPUT
       - name: "Build shiv package"
         run: |
           ./sh/build-package.sh
       - name: "Upload package as a github release"
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ steps.release-tag.outputs.release-tag }}
+          draft: ${{ endsWith('build-test', github.ref ) }}
           files: ./build/machine
