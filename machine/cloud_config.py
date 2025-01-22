@@ -20,5 +20,5 @@ runcmd:
   - mkdir -p {machine_config.script_dir}
   - curl -L {machine_config.script_url} -o {machine_config.script_path}
   - chmod +x {machine_config.script_path}
-  - [su, -c, "{machine_config.script_path} {escaped_args}", -, {machine_config.new_user_name}]
+  - [su, -c, "env BPI_MACHINE_SCRIPT_URL='{machine_config.script_url}' BPI_MACHINE_SCRIPT_DIR='{machine_config.script_dir}' {machine_config.script_path} {escaped_args}", -, {machine_config.new_user_name}]
 """
