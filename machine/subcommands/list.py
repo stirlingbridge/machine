@@ -85,7 +85,7 @@ def command(context, id, name, tag, type, region, all, output, quiet, unique):
         droplets = filter(lambda d: region == d.region["slug"], droplets)
 
     if not all:
-        droplets = filter(lambda d: is_same_session(command_context, d), droplets)
+        droplets = filter(lambda d: is_machine_created(d) and is_same_session(command_context, d), droplets)
 
     droplets = list(droplets)
 
