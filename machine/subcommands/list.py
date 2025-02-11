@@ -40,16 +40,10 @@ def print_json(droplets):
 @click.option("--region", "-r", metavar="<REGION>", help="Filter by region")
 @click.option("--output", "-o", metavar="<FORMAT>", help="Output format")
 @click.option(
-    "--include-unmanaged",
+    "--all",
     is_flag=True,
     default=False,
-    help="Include machines not created by this tool",
-)
-@click.option(
-    "--include-other-sessions",
-    is_flag=True,
-    default=False,
-    help="Include machines not created by other sessions of this tool",
+    help="All machines, including those not created by this tool or by other sessions",
 )
 @click.option("--quiet", "-q", is_flag=True, default=False, help="Only display machine IDs")
 @click.option(
@@ -59,7 +53,7 @@ def print_json(droplets):
     help="Return an error if there is more than one match",
 )
 @click.pass_context
-def command(context, id, name, tag, type, region, include_unmanaged, include_other_sessions, output, quiet, unique):
+def command(context, id, name, tag, type, region, all, output, quiet, unique):
     command_context: MainCmdCtx = context.obj
     manager = digitalocean.Manager(token=command_context.config.access_token)
 
@@ -90,10 +84,7 @@ def command(context, id, name, tag, type, region, include_unmanaged, include_oth
     if region:
         droplets = filter(lambda d: region == d.region["slug"], droplets)
 
-    if not include_unmanaged:
-        droplets = filter(lambda d: is_machine_created(d), droplets)
-
-    if not include_other_sessions:
+    if not all:
         droplets = filter(lambda d: is_same_session(command_context, d), droplets)
 
     droplets = list(droplets)

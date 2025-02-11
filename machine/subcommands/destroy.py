@@ -13,20 +13,14 @@ from machine.util import is_same_session
 @click.option("--confirm/--no-confirm", default=True)
 @click.option("--delete-dns/--no-delete-dns", default=True)
 @click.option(
-    "--include-unmanaged",
+    "--all",
     is_flag=True,
     default=False,
     help="Include machines not created by this tool",
 )
-@click.option(
-    "--include-other-sessions",
-    is_flag=True,
-    default=False,
-    help="Include machines not created by other sessions of this tool",
-)
 @click.argument("droplet-ids", nargs=-1)
 @click.pass_context
-def command(context, confirm, delete_dns, include_unmanaged, droplet_ids):
+def command(context, confirm, delete_dns, all, droplet_ids):
     command_context: MainCmdCtx = context.obj
     config = command_context.config
     manager = digitalocean.Manager(token=config.access_token)
@@ -37,10 +31,10 @@ def command(context, confirm, delete_dns, include_unmanaged, droplet_ids):
             fatal_error(f"Error: machine with id {droplet_id} not found")
         name = droplet.name
 
-        if not is_machine_created(droplet) and not include_unmanaged:
+        if not is_machine_created(droplet) and not all:
             fatal_error(f'ERROR: Cannot destroy droplet "{name}" (id: {droplet.id}), it was not created by machine.')
 
-        if not is_same_session(command_context, droplet) and not include_other_sessions:
+        if not is_same_session(command_context, droplet) and not all:
             fatal_error(
                 f'ERROR: Cannot destroy droplet "{name}" (id: {droplet.id}), it was created by a different session of machine.'
             )
