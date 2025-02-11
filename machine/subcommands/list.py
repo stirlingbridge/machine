@@ -3,7 +3,7 @@ import json
 import digitalocean
 
 from machine.log import fatal_error
-from machine.types import MainCmdCtx, TAG_MACHINE_TYPE_PREFIX
+from machine.types import MainCmdCtx, TAG_MACHINE_TYPE_PREFIX, TAG_MACHINE_SESSION_PREFIX
 from machine.util import get_machine_type, is_machine_created, is_same_session
 
 
@@ -62,14 +62,11 @@ def command(context, id, name, tag, type, region, all, output, quiet, unique):
         droplet = manager.get_droplet(id)
         if droplet:
             droplets.append(droplet)
-    elif name:
-        droplets = manager.get_all_droplets(params={"name": name})
-    elif tag:
-        droplets = manager.get_all_droplets(tag_name=tag)
-    elif type:
-        droplets = manager.get_all_droplets(tag_name=TAG_MACHINE_TYPE_PREFIX + type.lower())
-    else:
+
+    if all:
         droplets = manager.get_all_droplets()
+    else:
+        droplets = manager.get_all_droplets(tag_name=TAG_MACHINE_SESSION_PREFIX + command_context.session_id)
 
     # we can't combine most filters over the API, so we also filter ourselves
     if name:
