@@ -6,6 +6,8 @@ from machine.log import debug, fatal_error
 from machine.util import dnsRecordIdFromName, is_machine_created
 from machine.types import MainCmdCtx
 
+from machine.util import is_same_session
+
 
 @click.command(help="Destroy one or more machines")
 @click.option("--confirm/--no-confirm", default=True)
@@ -15,6 +17,12 @@ from machine.types import MainCmdCtx
     is_flag=True,
     default=False,
     help="Include machines not created by this tool",
+)
+@click.option(
+    "--include-other-sessions",
+    is_flag=True,
+    default=False,
+    help="Include machines not created by other sessions of this tool",
 )
 @click.argument("droplet-ids", nargs=-1)
 @click.pass_context
@@ -31,6 +39,11 @@ def command(context, confirm, delete_dns, include_unmanaged, droplet_ids):
 
         if not is_machine_created(droplet) and not include_unmanaged:
             fatal_error(f'ERROR: Cannot destroy droplet "{name}" (id: {droplet.id}), it was not created by machine.')
+
+        if not is_same_session(command_context, droplet) and not include_other_sessions:
+            fatal_error(
+                f'ERROR: Cannot destroy droplet "{name}" (id: {droplet.id}), it was created by a different session of machine.'
+            )
 
         if confirm:
             print(

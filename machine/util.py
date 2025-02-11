@@ -1,5 +1,13 @@
+import os
+import uuid
+
 from digitalocean import Domain, Manager, Project, SSHKey
+
+from machine.factory import yaml
+from machine.constants import default_config_dir_path, default_session_id_file_path
 from machine.types import TAG_MACHINE_TYPE_PREFIX, TAG_MACHINE_CREATED
+
+from machine.types import MainCmdCtx, TAG_MACHINE_SESSION_PREFIX
 
 
 def projectFromName(manager: Manager, name: str) -> Project:
@@ -35,3 +43,19 @@ def get_machine_type(droplet):
 
 def is_machine_created(droplet):
     return TAG_MACHINE_CREATED in droplet.tags
+
+
+def is_same_session(command_context: MainCmdCtx, droplet):
+    return TAG_MACHINE_SESSION_PREFIX + command_context.session_id in droplet.tags
+
+
+def load_session_id():
+    if not os.path.exists(default_config_dir_path):
+        os.mkdir(default_config_dir_path)
+
+    if not os.path.exists(default_session_id_file_path):
+        with open(default_session_id_file_path, "w") as f:
+            f.write("id: " + str(uuid.uuid4()).replace("-", "")[0:8])
+
+    sessionid_config = yaml().load(open(default_session_id_file_path, "r"))
+    return sessionid_config["id"]

@@ -4,7 +4,7 @@ import digitalocean
 
 from machine.log import fatal_error
 from machine.types import MainCmdCtx, TAG_MACHINE_TYPE_PREFIX
-from machine.util import get_machine_type, is_machine_created
+from machine.util import get_machine_type, is_machine_created, is_same_session
 
 
 def print_normal(droplets):
@@ -45,6 +45,12 @@ def print_json(droplets):
     default=False,
     help="Include machines not created by this tool",
 )
+@click.option(
+    "--include-other-sessions",
+    is_flag=True,
+    default=False,
+    help="Include machines not created by other sessions of this tool",
+)
 @click.option("--quiet", "-q", is_flag=True, default=False, help="Only display machine IDs")
 @click.option(
     "--unique",
@@ -53,7 +59,7 @@ def print_json(droplets):
     help="Return an error if there is more than one match",
 )
 @click.pass_context
-def command(context, id, name, tag, type, region, include_unmanaged, output, quiet, unique):
+def command(context, id, name, tag, type, region, include_unmanaged, include_other_sessions, output, quiet, unique):
     command_context: MainCmdCtx = context.obj
     manager = digitalocean.Manager(token=command_context.config.access_token)
 
@@ -86,6 +92,9 @@ def command(context, id, name, tag, type, region, include_unmanaged, output, qui
 
     if not include_unmanaged:
         droplets = filter(lambda d: is_machine_created(d), droplets)
+
+    if not include_other_sessions:
+        droplets = filter(lambda d: is_same_session(command_context, d), droplets)
 
     droplets = list(droplets)
 

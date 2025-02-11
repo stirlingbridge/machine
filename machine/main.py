@@ -2,8 +2,9 @@ import click
 from machine import config
 from machine import constants
 from machine.di import d
-from machine.types import CliOptions, MainCmdCtx
 from machine.subcommands import create, destroy, list, projects, ssh_keys, domains, list_domain
+from machine.types import CliOptions, MainCmdCtx
+from machine.util import load_session_id
 
 CLICK_CONTEXT_SETTINGS = dict(help_option_names=["-h", "--help"])
 
@@ -18,7 +19,7 @@ CLICK_CONTEXT_SETTINGS = dict(help_option_names=["-h", "--help"])
 def main(context, debug, quiet, verbose, dry_run, config_file):
     options = CliOptions(debug, quiet, verbose, dry_run)
     d.opt = options
-    main_context = MainCmdCtx(config.get(config_file))
+    main_context = MainCmdCtx(config.get(config_file), load_session_id())
     context.obj = main_context
 
 
