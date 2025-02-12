@@ -4,7 +4,7 @@ import json
 
 from machine.log import fatal_error
 from machine.types import MainCmdCtx, TAG_MACHINE_SESSION_PREFIX
-from machine.util import get_machine_type, json_dns_record
+from machine.util import json_dns_record
 
 
 def print_normal(records, zone):
