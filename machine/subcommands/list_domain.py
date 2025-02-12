@@ -4,6 +4,7 @@ import json
 
 from machine.log import fatal_error
 from machine.types import MainCmdCtx, TAG_MACHINE_CREATED, TAG_MACHINE_SESSION_PREFIX
+from machine.util import get_machine_type
 
 
 def print_normal(records, zone):
@@ -19,10 +20,20 @@ def print_quiet(records):
 def print_json(records, droplets, zone):
     simplified = []
     for r in records:
-        droplet_id = next((d.id for d in droplets if r.data == d.ip_address), None)
+        droplet = next((d for d in droplets if r.data == d.ip_address), None)
+        dropleti_simple = None
+        if droplet:
+            droplet_simple = {
+                "id": droplet.id,
+                "name": droplet.name,
+                "tags": droplet.tags,
+                "region": droplet.region["slug"],
+                "ip": droplet.ip_address,
+                "type": get_machine_type(droplet),
+            }
         simple = {
             "id": r.id,
-            "droplet": droplet_id,
+            "droplet": droplet_simple,
             "name": r.name,
             "fqdn": f"{r.name}.{zone}",
             "zone": zone,
@@ -62,12 +73,14 @@ def command(context, name, type, output, quiet, all, zone):
     else:
         records = filter(lambda r: r.type in ["A", "AAAA"], records)
 
-    droplets = []
-    if not all:
-        manager = digitalocean.Manager(token=command_context.config.access_token)
+    manager = digitalocean.Manager(token=command_context.config.access_token)
+    if all:
+        droplets = manager.get_all_droplets()
+    else:
         droplets = manager.get_all_droplets(tag_name=TAG_MACHINE_SESSION_PREFIX + command_context.session_id)
-        droplet_ips = [d.ip_address for d in droplets]
-        records = filter(lambda r: r.data in droplet_ips, records)
+
+    droplet_ips = [d.ip_address for d in droplets]
+    records = filter(lambda r: r.data in droplet_ips, records)
 
     records = list(records)
     if output == "json":
