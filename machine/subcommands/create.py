@@ -8,6 +8,8 @@ from machine.types import MainCmdCtx, TAG_MACHINE_CREATED, TAG_MACHINE_TYPE_PREF
 from machine.util import projectFromName, sshKeyFromName
 from machine.cloud_config import get_user_data
 
+from machine.types import TAG_MACHINE_SESSION_PREFIX
+
 
 def _validate_region(region: str):
     valid_regions = ["NYC1", "NYC3", "AMS3", "SFO2", "SFO3", "SGP1", "LON1", "FRA1", "TOR1", "BLR1", "SYD1"]
@@ -75,6 +77,7 @@ def command(context, name, tag, type, region, machine_size, image, wait_for_ip, 
 
     tags = [
         TAG_MACHINE_TYPE_PREFIX + type.lower(),
+        TAG_MACHINE_SESSION_PREFIX + command_context.session_id,
         TAG_MACHINE_CREATED,
     ]
     if tag:

@@ -1,9 +1,11 @@
 import click
+
 from machine import config
 from machine import constants
 from machine.di import d
-from machine.types import CliOptions, MainCmdCtx
 from machine.subcommands import create, destroy, list, projects, ssh_keys, domains, list_domain
+from machine.types import CliOptions, MainCmdCtx
+from machine.util import load_session_id
 
 CLICK_CONTEXT_SETTINGS = dict(help_option_names=["-h", "--help"])
 
@@ -14,11 +16,14 @@ CLICK_CONTEXT_SETTINGS = dict(help_option_names=["-h", "--help"])
 @click.option("--verbose", is_flag=True, default=False, help="Enable verbose output")
 @click.option("--dry-run", is_flag=True, default=False, help="Run but do not do anything")
 @click.option("--config-file", metavar="<PATH>", help=f"Specify the config file (default {constants.default_config_file_path})")
+@click.option(
+    "--session-id", metavar="<ID>", default=load_session_id(), help=f"Override the default session ID (default {load_session_id()})"
+)
 @click.pass_context
-def main(context, debug, quiet, verbose, dry_run, config_file):
+def main(context, debug, quiet, verbose, dry_run, config_file, session_id):
     options = CliOptions(debug, quiet, verbose, dry_run)
     d.opt = options
-    main_context = MainCmdCtx(config.get(config_file))
+    main_context = MainCmdCtx(config.get(config_file), session_id)
     context.obj = main_context
 
 

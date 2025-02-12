@@ -3,7 +3,8 @@ import digitalocean
 import json
 
 from machine.log import fatal_error
-from machine.types import MainCmdCtx, TAG_MACHINE_CREATED
+from machine.types import MainCmdCtx, TAG_MACHINE_SESSION_PREFIX
+from machine.util import dns_record_to_json_obj
 
 
 def print_normal(records, zone):
@@ -19,16 +20,8 @@ def print_quiet(records):
 def print_json(records, droplets, zone):
     simplified = []
     for r in records:
-        droplet_id = next((d.id for d in droplets if r.data == d.ip_address), None)
-        simple = {
-            "id": r.id,
-            "droplet": droplet_id,
-            "name": r.name,
-            "data": r.data,
-            "ttl": r.ttl,
-            "type": r.type,
-        }
-        simplified.append(simple)
+        droplet = next((d for d in droplets if r.data == d.ip_address), None)
+        simplified.append(dns_record_to_json_obj(r, zone, droplet))
     print(json.dumps(simplified))
 
 
@@ -38,14 +31,14 @@ def print_json(records, droplets, zone):
 @click.option("--output", "-o", metavar="<FORMAT>", help="Output format")
 @click.option("--quiet", "-q", is_flag=True, default=False, help="Only display machine IDs")
 @click.option(
-    "--include-unmanaged",
+    "--all",
     is_flag=True,
     default=False,
-    help="Include records not created by this tool",
+    help="Include all records, even those not created by this tool or created by other sessions",
 )
 @click.argument("zone", required=False)
 @click.pass_context
-def command(context, name, type, output, quiet, include_unmanaged, zone):
+def command(context, name, type, output, quiet, all, zone):
     command_context: MainCmdCtx = context.obj
     if not zone:
         zone = command_context.config.dns_zone
@@ -60,10 +53,11 @@ def command(context, name, type, output, quiet, include_unmanaged, zone):
     else:
         records = filter(lambda r: r.type in ["A", "AAAA"], records)
 
-    droplets = []
-    if not include_unmanaged:
-        manager = digitalocean.Manager(token=command_context.config.access_token)
-        droplets = manager.get_all_droplets(tag_name=TAG_MACHINE_CREATED)
+    manager = digitalocean.Manager(token=command_context.config.access_token)
+    if all:
+        droplets = manager.get_all_droplets()
+    else:
+        droplets = manager.get_all_droplets(tag_name=TAG_MACHINE_SESSION_PREFIX + command_context.session_id)
         droplet_ips = [d.ip_address for d in droplets]
         records = filter(lambda r: r.data in droplet_ips, records)
 

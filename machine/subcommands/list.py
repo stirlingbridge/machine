@@ -3,8 +3,8 @@ import json
 import digitalocean
 
 from machine.log import fatal_error
-from machine.types import MainCmdCtx, TAG_MACHINE_TYPE_PREFIX
-from machine.util import get_machine_type, is_machine_created
+from machine.types import MainCmdCtx, TAG_MACHINE_TYPE_PREFIX, TAG_MACHINE_SESSION_PREFIX
+from machine.util import get_machine_type, is_machine_created, is_same_session, droplet_to_json_obj
 
 
 def print_normal(droplets):
@@ -18,18 +18,7 @@ def print_quiet(droplets):
 
 
 def print_json(droplets):
-    simplified = []
-    for d in droplets:
-        simple = {
-            "id": d.id,
-            "name": d.name,
-            "tags": d.tags,
-            "region": d.region["slug"],
-            "ip": d.ip_address,
-            "type": get_machine_type(d),
-        }
-        simplified.append(simple)
-    print(json.dumps(simplified))
+    print(json.dumps([droplet_to_json_obj(d) for d in droplets]))
 
 
 @click.command(help="List machines")
@@ -40,10 +29,10 @@ def print_json(droplets):
 @click.option("--region", "-r", metavar="<REGION>", help="Filter by region")
 @click.option("--output", "-o", metavar="<FORMAT>", help="Output format")
 @click.option(
-    "--include-unmanaged",
+    "--all",
     is_flag=True,
     default=False,
-    help="Include machines not created by this tool",
+    help="All machines, including those not created by this tool or by other sessions",
 )
 @click.option("--quiet", "-q", is_flag=True, default=False, help="Only display machine IDs")
 @click.option(
@@ -53,7 +42,7 @@ def print_json(droplets):
     help="Return an error if there is more than one match",
 )
 @click.pass_context
-def command(context, id, name, tag, type, region, include_unmanaged, output, quiet, unique):
+def command(context, id, name, tag, type, region, all, output, quiet, unique):
     command_context: MainCmdCtx = context.obj
     manager = digitalocean.Manager(token=command_context.config.access_token)
 
@@ -62,14 +51,11 @@ def command(context, id, name, tag, type, region, include_unmanaged, output, qui
         droplet = manager.get_droplet(id)
         if droplet:
             droplets.append(droplet)
-    elif name:
-        droplets = manager.get_all_droplets(params={"name": name})
-    elif tag:
-        droplets = manager.get_all_droplets(tag_name=tag)
-    elif type:
-        droplets = manager.get_all_droplets(tag_name=TAG_MACHINE_TYPE_PREFIX + type.lower())
-    else:
+
+    if all:
         droplets = manager.get_all_droplets()
+    else:
+        droplets = manager.get_all_droplets(tag_name=TAG_MACHINE_SESSION_PREFIX + command_context.session_id)
 
     # we can't combine most filters over the API, so we also filter ourselves
     if name:
@@ -84,8 +70,8 @@ def command(context, id, name, tag, type, region, include_unmanaged, output, qui
     if region:
         droplets = filter(lambda d: region == d.region["slug"], droplets)
 
-    if not include_unmanaged:
-        droplets = filter(lambda d: is_machine_created(d), droplets)
+    if not all:
+        droplets = filter(lambda d: is_machine_created(d) and is_same_session(command_context, d), droplets)
 
     droplets = list(droplets)
 

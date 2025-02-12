@@ -2,6 +2,7 @@ from dataclasses import dataclass
 
 TAG_MACHINE_CREATED = "machine:created"
 TAG_MACHINE_TYPE_PREFIX = "machine:type:"
+TAG_MACHINE_SESSION_PREFIX = "machine:session:"
 
 
 @dataclass
@@ -26,6 +27,7 @@ class Config:
 @dataclass
 class MainCmdCtx:
     config: Config
+    session_id: str
 
 
 @dataclass
