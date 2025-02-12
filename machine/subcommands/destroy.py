@@ -2,7 +2,7 @@ import click
 import digitalocean
 
 from machine.di import d
-from machine.log import debug, fatal_error
+from machine.log import debug, fatal_error, output
 from machine.util import dnsRecordIdFromName, is_machine_created
 from machine.types import MainCmdCtx
 
@@ -40,7 +40,7 @@ def command(context, confirm, delete_dns, all, droplet_ids):
             )
 
         if confirm:
-            print(
+            output(
                 "Type YES (not y or yes or Yes) to confirm that you want to permanently"
                 f' DELETE/DESTROY droplet "{name}" (id: {droplet.id})'
             )
