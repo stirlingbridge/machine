@@ -4,7 +4,7 @@ import digitalocean
 
 from machine.log import fatal_error
 from machine.types import MainCmdCtx, TAG_MACHINE_TYPE_PREFIX, TAG_MACHINE_SESSION_PREFIX
-from machine.util import get_machine_type, is_machine_created, is_same_session
+from machine.util import get_machine_type, is_machine_created, is_same_session, json_droplet
 
 
 def print_normal(droplets):
@@ -18,18 +18,7 @@ def print_quiet(droplets):
 
 
 def print_json(droplets):
-    simplified = []
-    for d in droplets:
-        simple = {
-            "id": d.id,
-            "name": d.name,
-            "tags": d.tags,
-            "region": d.region["slug"],
-            "ip": d.ip_address,
-            "type": get_machine_type(d),
-        }
-        simplified.append(simple)
-    print(json.dumps(simplified))
+    print(json.dumps([json_droplet(d) for d in droplets]))
 
 
 @click.command(help="List machines")

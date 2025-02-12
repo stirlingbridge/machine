@@ -59,3 +59,30 @@ def load_session_id():
 
     sessionid_config = yaml().load(open(default_session_id_file_path, "r"))
     return sessionid_config["id"]
+
+
+def json_droplet(droplet):
+    return {
+        "id": droplet.id,
+        "name": droplet.name,
+        "tags": droplet.tags,
+        "region": droplet.region["slug"],
+        "ip": droplet.ip_address,
+        "type": get_machine_type(droplet),
+    }
+
+
+def json_dns_record(dns_record, zone, droplet):
+    if droplet:
+        droplet = json_droplet(droplet)
+
+    return {
+        "id": dns_record.id,
+        "droplet": droplet,
+        "name": dns_record.name,
+        "fqdn": f"{dns_record.name}.{zone}",
+        "zone": zone,
+        "data": dns_record.data,
+        "ttl": dns_record.ttl,
+        "type": dns_record.type,
+    }

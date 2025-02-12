@@ -3,8 +3,8 @@ import digitalocean
 import json
 
 from machine.log import fatal_error
-from machine.types import MainCmdCtx, TAG_MACHINE_CREATED, TAG_MACHINE_SESSION_PREFIX
-from machine.util import get_machine_type
+from machine.types import MainCmdCtx, TAG_MACHINE_SESSION_PREFIX
+from machine.util import get_machine_type, json_dns_record
 
 
 def print_normal(records, zone):
@@ -21,27 +21,7 @@ def print_json(records, droplets, zone):
     simplified = []
     for r in records:
         droplet = next((d for d in droplets if r.data == d.ip_address), None)
-        dropleti_simple = None
-        if droplet:
-            droplet_simple = {
-                "id": droplet.id,
-                "name": droplet.name,
-                "tags": droplet.tags,
-                "region": droplet.region["slug"],
-                "ip": droplet.ip_address,
-                "type": get_machine_type(droplet),
-            }
-        simple = {
-            "id": r.id,
-            "droplet": droplet_simple,
-            "name": r.name,
-            "fqdn": f"{r.name}.{zone}",
-            "zone": zone,
-            "data": r.data,
-            "ttl": r.ttl,
-            "type": r.type,
-        }
-        simplified.append(simple)
+        simplified.append(json_dns_record(r, zone, droplet))
     print(json.dumps(simplified))
 
 
