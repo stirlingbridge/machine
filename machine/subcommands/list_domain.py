@@ -3,10 +3,7 @@ import digitalocean
 import json
 
 from machine.log import fatal_error
-from machine.types import MainCmdCtx, TAG_MACHINE_CREATED
-from machine.util import is_machine_created, is_same_session
-
-from machine.types import TAG_MACHINE_SESSION_PREFIX
+from machine.types import MainCmdCtx, TAG_MACHINE_CREATED, TAG_MACHINE_SESSION_PREFIX
 
 
 def print_normal(records, zone):
@@ -27,6 +24,8 @@ def print_json(records, droplets, zone):
             "id": r.id,
             "droplet": droplet_id,
             "name": r.name,
+            "fqdn": f"{r.name}.{zone}",
+            "zone": zone,
             "data": r.data,
             "ttl": r.ttl,
             "type": r.type,
