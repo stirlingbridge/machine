@@ -4,7 +4,7 @@ import json
 
 from machine.log import fatal_error
 from machine.types import MainCmdCtx, TAG_MACHINE_SESSION_PREFIX
-from machine.util import json_dns_record
+from machine.util import dns_record_to_json_obj
 
 
 def print_normal(records, zone):
@@ -21,7 +21,7 @@ def print_json(records, droplets, zone):
     simplified = []
     for r in records:
         droplet = next((d for d in droplets if r.data == d.ip_address), None)
-        simplified.append(json_dns_record(r, zone, droplet))
+        simplified.append(dns_record_to_json_obj(r, zone, droplet))
     print(json.dumps(simplified))
 
 
@@ -58,9 +58,8 @@ def command(context, name, type, output, quiet, all, zone):
         droplets = manager.get_all_droplets()
     else:
         droplets = manager.get_all_droplets(tag_name=TAG_MACHINE_SESSION_PREFIX + command_context.session_id)
-
-    droplet_ips = [d.ip_address for d in droplets]
-    records = filter(lambda r: r.data in droplet_ips, records)
+        droplet_ips = [d.ip_address for d in droplets]
+        records = filter(lambda r: r.data in droplet_ips, records)
 
     records = list(records)
     if output == "json":

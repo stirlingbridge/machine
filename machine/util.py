@@ -61,7 +61,7 @@ def load_session_id():
     return sessionid_config["id"]
 
 
-def json_droplet(droplet):
+def droplet_to_json_obj(droplet):
     return {
         "id": droplet.id,
         "name": droplet.name,
@@ -72,9 +72,9 @@ def json_droplet(droplet):
     }
 
 
-def json_dns_record(dns_record, zone, droplet):
+def dns_record_to_json_obj(dns_record, zone, droplet):
     if droplet:
-        droplet = json_droplet(droplet)
+        droplet = droplet_to_json_obj(droplet)
 
     return {
         "id": dns_record.id,
