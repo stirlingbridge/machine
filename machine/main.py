@@ -3,6 +3,7 @@ import click
 from machine import config
 from machine import constants
 from machine.di import d
+from machine.log import output
 from machine.subcommands import create, destroy, list, projects, ssh_keys, domains, list_domain
 from machine.types import CliOptions, MainCmdCtx
 from machine.util import load_session_id
@@ -30,7 +31,7 @@ def main(context, debug, quiet, verbose, dry_run, config_file, session_id):
 @main.command()
 @click.pass_context
 def version(context):
-    print("Version command")
+    output("Version command")
 
 
 main.add_command(create.command, "create")

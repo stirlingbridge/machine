@@ -2,19 +2,19 @@ import click
 import digitalocean
 import json
 
-from machine.log import fatal_error
+from machine.log import fatal_error, output
 from machine.types import MainCmdCtx, TAG_MACHINE_SESSION_PREFIX
 from machine.util import dns_record_to_json_obj
 
 
 def print_normal(records, zone):
     for record in records:
-        print(f"{record.name}\t{record.type}\t{record.data}")
+        output(f"{record.name}\t{record.type}\t{record.data}")
 
 
 def print_quiet(records):
     for record in records:
-        print(record.name)
+        output(record.name)
 
 
 def print_json(records, droplets, zone):
@@ -22,7 +22,7 @@ def print_json(records, droplets, zone):
     for r in records:
         droplet = next((d for d in droplets if r.data == d.ip_address), None)
         simplified.append(dns_record_to_json_obj(r, zone, droplet))
-    print(json.dumps(simplified))
+    output(json.dumps(simplified))
 
 
 @click.command(help="List domain records")

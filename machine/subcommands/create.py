@@ -3,7 +3,7 @@ import digitalocean
 import time
 from machine.config import get_machine
 from machine.di import d
-from machine.log import fatal_error, info, debug
+from machine.log import fatal_error, info, debug, output
 from machine.types import MainCmdCtx, TAG_MACHINE_CREATED, TAG_MACHINE_TYPE_PREFIX
 from machine.util import projectFromName, sshKeyFromName
 from machine.cloud_config import get_user_data
@@ -99,9 +99,9 @@ def command(context, name, tag, type, region, machine_size, image, wait_for_ip, 
     droplet.create()
     if droplet.id:
         if d.opt.quiet:
-            print(f"{droplet.id}")
+            output(f"{droplet.id}")
         else:
-            print(f"New droplet created with id: {droplet.id}")
+            output(f"New droplet created with id: {droplet.id}")
     # If requested, assign to a specified project
     if config.project:
         project_name = config.project
@@ -119,7 +119,7 @@ def command(context, name, tag, type, region, machine_size, image, wait_for_ip, 
             droplet.load()
             ip_address = droplet.ip_address
             if d.opt.verbose:
-                print("Waiting for droplet IP address")
+                output("Waiting for droplet IP address")
         if d.opt.quiet:
             info(f"{ip_address}")
         else:
