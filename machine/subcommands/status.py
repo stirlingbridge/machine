@@ -18,7 +18,7 @@ def print_json(statuses):
     output(json.dumps(statuses))
 
 
-@click.command(help="List machines")
+@click.command(help="Machine status")
 @click.option("--id", metavar="<MACHINE-ID>", help="Filter by id")
 @click.option("--name", "-n", metavar="<MACHINE-NAME>", help="Filter by name")
 @click.option("--tag", "-t", metavar="<TAG-TEXT>", help="Filter by tag")
