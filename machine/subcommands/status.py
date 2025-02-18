@@ -33,20 +33,11 @@ def print_json(statuses):
     help="All machines, including those not created by this tool or by other sessions",
 )
 @click.option("--quiet", "-q", is_flag=True, default=False, help="Only display machine IDs")
-@click.option(
-    "--unique",
-    is_flag=True,
-    default=False,
-    help="Return an error if there is more than one match",
-)
 @click.pass_context
-def command(context, id, name, tag, type, region, all, output, quiet, unique, status_check):
+def command(context, id, name, tag, type, region, all, output, quiet, status_check):
     command_context: MainCmdCtx = context.obj
 
     droplets = get_droplets(command_context, id, name, tag, type, region, all)
-
-    if unique and len(droplets) > 1:
-        fatal_error(f"ERROR: --unique match required but {len(droplets)} matches found.")
 
     statuses = []
     for d in droplets:
