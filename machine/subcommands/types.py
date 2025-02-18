@@ -8,5 +8,7 @@ from machine.config import get_machines
 @click.pass_context
 def command(context):
     config_machines = get_machines()
-    for m in config_machines:
-        output(m)
+    names = list(config_machines.keys())
+    names.sort()
+    for n in names:
+        output(n)
