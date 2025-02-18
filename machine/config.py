@@ -52,3 +52,14 @@ def get_machine(name: str) -> MachineConfig:
         target_config.get("script-path"),
         target_config.get("script-args"),
     )
+
+
+def get_machines():
+    if not _loaded_config.c:
+        fatal_error("Attempt to fetch machine data before config loaded")
+    config = _loaded_config.c
+
+    ret = {}
+    for name in config["machines"]:
+        ret[name] = get_machine(name)
+    return ret
