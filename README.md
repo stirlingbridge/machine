@@ -107,6 +107,10 @@ If `script-url`, `script-dir`, and `script-path` are all provided, the script is
 - `$MACHINE_SCRIPT_DIR` — directory path for the script
 - `$MACHINE_FQDN` — fully qualified domain name of the machine (if DNS is configured)
 
+#### Advanced Machine Setup
+
+Examples of advanced machine setup scripts can be found in [the machine-provisioning repository](https://github.com/bozemanpass/machine-provisioning).
+
 ### Session Management
 
 Each invocation of `machine` uses a session ID (auto-generated and stored in `~/.machine/session-id.yml`). Machines are tagged with their session ID on creation. By default, `list`, `status`, `list-domain`, and `destroy` only operate on machines from the current session. Use the `--all` flag to include machines from other sessions or machines not created by this tool.
