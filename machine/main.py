@@ -1,3 +1,5 @@
+import os
+
 import click
 
 from machine import config
@@ -35,7 +37,13 @@ def main(context, debug, quiet, verbose, dry_run, config_file, session_id):
 @main.command()
 @click.pass_context
 def version(context):
-    output("Version command")
+    try:
+        version_file = os.path.join(os.path.dirname(__file__), "version.txt")
+        with open(version_file) as f:
+            version_string = f.read().strip()
+    except FileNotFoundError:
+        version_string = "dev"
+    output(version_string)
 
 
 main.add_command(create.command, "create")

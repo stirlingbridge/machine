@@ -8,4 +8,6 @@ dev
 .venv
 # Ignore the zipfile build directory
 build
+# Generated at build time
+machine/version.txt
 
