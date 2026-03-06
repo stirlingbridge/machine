@@ -24,6 +24,10 @@ CLICK_CONTEXT_SETTINGS = dict(help_option_names=["-h", "--help"])
 def main(context, debug, quiet, verbose, dry_run, config_file, session_id):
     options = CliOptions(debug, quiet, verbose, dry_run)
     d.opt = options
+    # Skip config loading for version subcommand since it doesn't need it
+    # and should work even when no config file exists (#25)
+    if context.invoked_subcommand == "version":
+        return
     main_context = MainCmdCtx(config.get(config_file), session_id)
     context.obj = main_context
 
