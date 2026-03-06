@@ -71,6 +71,8 @@ def command(context, name, tag, type, region, machine_size, image, wait_for_ip, 
             info(user_data)
 
     ssh_key = sshKeyFromName(manager, config.ssh_key)
+    if not ssh_key:
+        fatal_error(f"Error: SSH key '{config.ssh_key}' not found in DigitalOcean")
 
     _validate_region(region)
     _validate_image(image)
