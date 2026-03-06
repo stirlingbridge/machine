@@ -1,0 +1,6 @@
+[flake8]
+extend-ignore = E203
+exclude = .git,__pycache__,old,build,dist,dev,.venv
+max-complexity = 25
+max-line-length = 132
+per-file-ignores = ./machine/cloud_config.py:E501

@@ -1,0 +1,37 @@
+[project]
+name = "machine"
+version = "1.0.0"
+description = "Utility for creating and managing VMs"
+readme = "README.md"
+license = "AGPL-3.0-only"
+requires-python = ">=3.8"
+authors = [
+    { name = "Stirlingbridge", email = "info@stirlingbridge.website" },
+]
+classifiers = [
+    "Programming Language :: Python :: 3.8",
+    "Operating System :: OS Independent",
+]
+dependencies = [
+    "click==8.1.7",
+    "python-digitalocean==1.17.0",
+    "ruamel.yaml>=0.17.32",
+    "requests==2.32.3",
+    "expandvars==1.0.0",
+]
+
+[project.scripts]
+machine = "machine.main:main"
+
+[project.urls]
+Homepage = "https://github.com/stirlingbridge/machine"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[dependency-groups]
+dev = [
+    "flake8",
+    "black",
+]
