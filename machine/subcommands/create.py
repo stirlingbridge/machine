@@ -131,13 +131,13 @@ def command(context, name, tag, type, region, machine_size, image, wait_for_ip, 
         if d.opt.debug:
             debug(f"Setting host record {host}.{zone} to {ip_address}")
         domain = digitalocean.Domain(token=config.access_token, name=zone)
-        if not domain:
-            fatal_error(f"Error: Domain {domain} does not exist, machine created but DNS record not set")
-        record = domain.create_new_domain_record(type="A", ttl=60 * 5, name=host, data=ip_address, tag=TAG_MACHINE_CREATED)
+        try:
+            record = domain.create_new_domain_record(type="A", ttl=60 * 5, name=host, data=ip_address, tag=TAG_MACHINE_CREATED)
+        except digitalocean.NotFoundError:
+            info(f"Warning: DNS zone '{zone}' not found in DigitalOcean, DNS record not set")
+            record = None
         if record:
             if d.opt.verbose:
                 info(f"Created DNS record:{record}")
             if not d.opt.quiet:
                 info(f"DNS: {host}.{zone}")
-        else:
-            fatal_error("Error: Failed to create DNS record")
