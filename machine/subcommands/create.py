@@ -58,6 +58,7 @@ def command(context, name, tag, type, region, machine_size, image, wait_for_ip, 
 
     manager = digitalocean.Manager(token=command_context.config.access_token)
 
+    user_data = None
     if initialize:
         if not type:
             fatal_error("Error: a machine type must be supplied")
@@ -78,10 +79,11 @@ def command(context, name, tag, type, region, machine_size, image, wait_for_ip, 
     _validate_image(image)
 
     tags = [
-        TAG_MACHINE_TYPE_PREFIX + type.lower(),
         TAG_MACHINE_SESSION_PREFIX + command_context.session_id,
         TAG_MACHINE_CREATED,
     ]
+    if type:
+        tags.append(TAG_MACHINE_TYPE_PREFIX + type.lower())
     if tag:
         tags.append(tag)
 
