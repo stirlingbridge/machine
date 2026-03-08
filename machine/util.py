@@ -66,7 +66,7 @@ def droplet_to_json_obj(droplet):
         "id": droplet.id,
         "name": droplet.name,
         "tags": droplet.tags,
-        "region": droplet.region["slug"],
+        "region": droplet.region["slug"] if droplet.region else None,
         "ip": droplet.ip_address,
         "type": get_machine_type(droplet),
     }

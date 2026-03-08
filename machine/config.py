@@ -49,17 +49,25 @@ def _load_config_data(config_file_name: str):
     return config
 
 
+def _require_key(d, key, section_name):
+    if key not in d:
+        fatal_error(f"Required key '{key}' not found in '{section_name}' section of config file")
+    return d[key]
+
+
 def get(config_file_name: str) -> Config:
     config = _load_config_data(config_file_name)
+    if "digital-ocean" not in config:
+        fatal_error("Required 'digital-ocean' section not found in config file")
     config_do = config["digital-ocean"]
     return Config(
-        config_do["access-token"],
-        config_do["ssh-key"],
+        _require_key(config_do, "access-token", "digital-ocean"),
+        _require_key(config_do, "ssh-key", "digital-ocean"),
         config_do.get("dns-zone"),
-        config_do["machine-size"],
-        config_do["image"],
-        config_do["region"],
-        config_do["project"],
+        _require_key(config_do, "machine-size", "digital-ocean"),
+        _require_key(config_do, "image", "digital-ocean"),
+        _require_key(config_do, "region", "digital-ocean"),
+        _require_key(config_do, "project", "digital-ocean"),
     )
 
 
@@ -67,10 +75,14 @@ def get_machine(name: str) -> MachineConfig:
     if not _loaded_config.c:
         fatal_error("Attempt to fetch machine data before config loaded")
     config = _loaded_config.c
+    if "machines" not in config:
+        fatal_error("Required 'machines' section not found in config file")
     config_machines = config["machines"]
+    if name not in config_machines:
+        fatal_error(f"Machine type '{name}' not found in config file. Available types: {', '.join(config_machines.keys())}")
     target_config = config_machines[name]
     return MachineConfig(
-        target_config["new-user-name"],
+        _require_key(target_config, "new-user-name", f"machines.{name}"),
         target_config.get("script-url"),
         target_config.get("script-dir"),
         target_config.get("script-path"),
@@ -83,6 +95,8 @@ def get_machines():
         fatal_error("Attempt to fetch machine data before config loaded")
     config = _loaded_config.c
 
+    if "machines" not in config:
+        fatal_error("Required 'machines' section not found in config file")
     ret = {}
     for name in config["machines"]:
         ret[name] = get_machine(name)

@@ -9,7 +9,8 @@ from machine.util import get_machine_type, is_machine_created, is_same_session, 
 
 def print_normal(droplets):
     for droplet in droplets:
-        output(f"{droplet.name} ({droplet.id}, {droplet.region['slug']}, {get_machine_type(droplet)}): {droplet.ip_address}")
+        region = droplet.region["slug"] if droplet.region else "unknown"
+        output(f"{droplet.name} ({droplet.id}, {region}, {get_machine_type(droplet)}): {droplet.ip_address}")
 
 
 def print_quiet(droplets):
@@ -45,7 +46,7 @@ def get_droplets(command_context, id=None, name=None, tag=None, type=None, regio
         droplets = filter(lambda d: TAG_MACHINE_TYPE_PREFIX + type.lower() in d.tags, droplets)
 
     if region:
-        droplets = filter(lambda d: region == d.region["slug"], droplets)
+        droplets = filter(lambda d: d.region and region == d.region["slug"], droplets)
 
     if not all:
         droplets = filter(lambda d: is_machine_created(d) and is_same_session(command_context, d), droplets)
