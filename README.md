@@ -107,6 +107,28 @@ If `script-url`, `script-dir`, and `script-path` are all provided, the script is
 - `$MACHINE_SCRIPT_DIR` — directory path for the script
 - `$MACHINE_FQDN` — fully qualified domain name of the machine (if DNS is configured)
 
+#### Environment Variable Substitution
+
+Config values support environment variable substitution using `${VAR}` syntax, similar to Docker Compose files. This is useful for keeping secrets like API tokens out of the config file.
+
+Supported forms:
+- `${VAR}` — substitutes the value of `VAR`; errors if the variable is not set
+- `${VAR:-default}` — substitutes the value of `VAR`, or `default` if the variable is not set
+
+Example:
+```yaml
+digital-ocean:
+    access-token: ${DO_API_TOKEN}
+    ssh-key: ${SSH_KEY_NAME:-my-ssh-key}
+    dns-zone: example.com
+    machine-size: ${MACHINE_SIZE:-s-4vcpu-8gb}
+    image: ubuntu-22-04-x64
+    region: ${DO_REGION:-nyc3}
+    project: Infrastructure
+```
+
+Substitution is applied to all string values throughout the config file, including the `machines` section.
+
 #### Advanced Machine Setup
 
 Examples of advanced machine setup scripts can be found in [the machine-provisioning repository](https://github.com/bozemanpass/machine-provisioning).
