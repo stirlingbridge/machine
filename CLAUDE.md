@@ -34,19 +34,18 @@ pyproject.toml       # Project metadata and dependencies
 ```bash
 uv sync                    # Install dependencies (creates .venv)
 uv run machine --help      # Run CLI in development
-uv run flake8              # Lint
-./sh/lint.sh --fix         # Auto-format with black, then lint
+uv run ruff check machine/ # Lint
+./sh/lint.sh --fix         # Auto-format with ruff, then lint
 ./sh/build-package.sh      # Build shiv executable to build/machine
 make dev                   # Alias for uv sync
 make build                 # Alias for build-package.sh
-make lint                  # Alias for uv run flake8
+make lint                  # Alias for ruff check + format check
 ```
 
 ## Code Style
 
-- **Formatter**: black (line length 132)
-- **Linter**: flake8 (max line length 132, max complexity 25, E203 ignored)
-- Config in `.flake8`
+- **Linter & Formatter**: ruff (line length 132, max complexity 25, E203 ignored)
+- Config in `pyproject.toml` under `[tool.ruff]`
 
 ## CI/CD
 

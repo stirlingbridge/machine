@@ -38,7 +38,19 @@ addopts = "-m 'not e2e'"
 
 [dependency-groups]
 dev = [
-    "flake8",
-    "black",
+    "ruff",
     "pytest",
 ]
+
+[tool.ruff]
+line-length = 132
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "C90"]
+ignore = ["E203"]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 25
+
+[tool.ruff.lint.per-file-ignores]
+"machine/cloud_config.py" = ["E501"]

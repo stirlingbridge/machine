@@ -12,4 +12,5 @@ test-e2e:
 	uv run pytest tests/test_e2e.py -v -m e2e
 
 lint:
-	uv run flake8
+	uv run ruff check machine/
+	uv run ruff format --check machine/

@@ -42,6 +42,6 @@ runcmd:
   - mkdir -p {machine_config.script_dir}
   - curl -L {machine_config.script_url} -o {machine_config.script_path}
   - chmod +x {machine_config.script_path}
-  - [su, -c, "env {' '.join([f"{k}='{v}'" for k, v in cloud_env.items()])} {machine_config.script_path} {escaped_args}", -, {machine_config.new_user_name}]
+  - [su, -c, "env {" ".join([f"{k}='{v}'" for k, v in cloud_env.items()])} {machine_config.script_path} {escaped_args}", -, {machine_config.new_user_name}]
 """
     return cloud_config
