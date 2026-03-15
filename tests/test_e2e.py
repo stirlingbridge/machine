@@ -1,20 +1,28 @@
-"""End-to-end tests that create real VMs on DigitalOcean.
+"""End-to-end tests that create real VMs on a cloud provider.
 
-These tests require a real DigitalOcean environment and are NOT run as part of
+These tests require a real cloud provider environment and are NOT run as part of
 the normal test suite. They must be invoked explicitly:
 
     uv run pytest tests/test_e2e.py -v
 
-Required environment variables:
+Provider selection:
+    E2E_PROVIDER    - Provider name: "digital-ocean" (default) or "vultr"
+
+Required environment variables (all providers):
+    E2E_SSH_KEY     - Name of an SSH key already registered with the provider
+    E2E_DNS_ZONE    - DNS zone managed by the provider (e.g. "test.example.com")
+
+Required environment variables (DigitalOcean):
     E2E_DO_TOKEN    - DigitalOcean API token
-    E2E_SSH_KEY     - Name of an SSH key already registered in DO
-    E2E_DNS_ZONE    - DNS zone managed by DO (e.g. "test.example.com")
     E2E_PROJECT     - DO project name to assign droplets to
 
+Required environment variables (Vultr):
+    E2E_VULTR_API_KEY - Vultr API key
+
 Optional environment variables:
-    E2E_REGION      - Region slug (default: nyc1)
-    E2E_IMAGE       - Image slug (default: ubuntu-24-04-x64)
-    E2E_SIZE        - Machine size slug (default: s-1vcpu-512mb-10gb)
+    E2E_REGION      - Region slug (default: provider-specific)
+    E2E_IMAGE       - Image slug or ID (default: provider-specific)
+    E2E_SIZE        - Machine size slug (default: provider-specific)
 """
 
 import json
@@ -26,28 +34,60 @@ import pytest
 
 
 # ---------------------------------------------------------------------------
-# Skip the entire module if credentials are not provided
+# Provider configuration
 # ---------------------------------------------------------------------------
 
-E2E_DO_TOKEN = os.environ.get("E2E_DO_TOKEN")
+E2E_PROVIDER = os.environ.get("E2E_PROVIDER", "digital-ocean")
+
+_PROVIDER_DEFAULTS = {
+    "digital-ocean": {
+        "region": "nyc1",
+        "image": "ubuntu-24-04-x64",
+        "size": "s-1vcpu-512mb-10gb",
+    },
+    "vultr": {
+        "region": "ewr",
+        "image": "2136",
+        "size": "vc2-1c-1gb",
+    },
+}
+
+_defaults = _PROVIDER_DEFAULTS.get(E2E_PROVIDER, _PROVIDER_DEFAULTS["digital-ocean"])
+
 E2E_SSH_KEY = os.environ.get("E2E_SSH_KEY")
 E2E_DNS_ZONE = os.environ.get("E2E_DNS_ZONE")
-E2E_REGION = os.environ.get("E2E_REGION", "nyc1")
-E2E_IMAGE = os.environ.get("E2E_IMAGE", "ubuntu-24-04-x64")
-E2E_SIZE = os.environ.get("E2E_SIZE", "s-1vcpu-512mb-10gb")
+E2E_REGION = os.environ.get("E2E_REGION", _defaults["region"])
+E2E_IMAGE = os.environ.get("E2E_IMAGE", _defaults["image"])
+E2E_SIZE = os.environ.get("E2E_SIZE", _defaults["size"])
+
+# Provider-specific credentials
+E2E_DO_TOKEN = os.environ.get("E2E_DO_TOKEN")
 E2E_PROJECT = os.environ.get("E2E_PROJECT")
+E2E_VULTR_API_KEY = os.environ.get("E2E_VULTR_API_KEY")
+
+
+# ---------------------------------------------------------------------------
+# Skip the entire module if credentials are not provided
+# ---------------------------------------------------------------------------
 
 pytestmark = pytest.mark.e2e
 
 _MISSING = []
-if not E2E_DO_TOKEN:
-    _MISSING.append("E2E_DO_TOKEN")
 if not E2E_SSH_KEY:
     _MISSING.append("E2E_SSH_KEY")
 if not E2E_DNS_ZONE:
     _MISSING.append("E2E_DNS_ZONE")
-if not E2E_PROJECT:
-    _MISSING.append("E2E_PROJECT")
+
+if E2E_PROVIDER == "digital-ocean":
+    if not E2E_DO_TOKEN:
+        _MISSING.append("E2E_DO_TOKEN")
+    if not E2E_PROJECT:
+        _MISSING.append("E2E_PROJECT")
+elif E2E_PROVIDER == "vultr":
+    if not E2E_VULTR_API_KEY:
+        _MISSING.append("E2E_VULTR_API_KEY")
+else:
+    _MISSING.append(f"E2E_PROVIDER (unknown provider: {E2E_PROVIDER})")
 
 if _MISSING:
     pytestmark = [
@@ -62,25 +102,38 @@ if _MISSING:
 
 
 def _unique_name(prefix="e2etest"):
-    """Generate a short unique droplet name safe for DNS."""
+    """Generate a short unique instance name safe for DNS."""
     return f"{prefix}-{uuid.uuid4().hex[:8]}"
 
 
 def _write_config(path, **overrides):
     """Write a minimal config file for the e2e test run."""
-    cfg = {
-        "access-token": E2E_DO_TOKEN,
-        "ssh-key": E2E_SSH_KEY,
-        "dns-zone": E2E_DNS_ZONE,
-        "machine-size": E2E_SIZE,
-        "image": E2E_IMAGE,
-        "region": E2E_REGION,
-    }
-    cfg["project"] = E2E_PROJECT
-    cfg.update(overrides)
+    if E2E_PROVIDER == "digital-ocean":
+        cfg = {
+            "access-token": E2E_DO_TOKEN,
+            "ssh-key": E2E_SSH_KEY,
+            "dns-zone": E2E_DNS_ZONE,
+            "machine-size": E2E_SIZE,
+            "image": E2E_IMAGE,
+            "region": E2E_REGION,
+            "project": E2E_PROJECT,
+        }
+        cfg.update(overrides)
+        provider_lines = "\n".join(f"  {k}: {v}" for k, v in cfg.items())
+        content = f"digital-ocean:\n{provider_lines}\nmachines:\n  e2e-basic:\n    new-user-name: e2euser\n"
+    elif E2E_PROVIDER == "vultr":
+        cfg = {
+            "api-key": E2E_VULTR_API_KEY,
+            "ssh-key": E2E_SSH_KEY,
+            "dns-zone": E2E_DNS_ZONE,
+            "machine-size": E2E_SIZE,
+            "image": E2E_IMAGE,
+            "region": E2E_REGION,
+        }
+        cfg.update(overrides)
+        provider_lines = "\n".join(f"  {k}: {v}" for k, v in cfg.items())
+        content = f"vultr:\n{provider_lines}\nmachines:\n  e2e-basic:\n    new-user-name: e2euser\n"
 
-    do_lines = "\n".join(f"  {k}: {v}" for k, v in cfg.items())
-    content = f"digital-ocean:\n{do_lines}\nmachines:\n  e2e-basic:\n    new-user-name: e2euser\n"
     with open(path, "w") as f:
         f.write(content)
 
@@ -97,14 +150,17 @@ def run_machine(*args, config_file=None, session_id=None):
     return result
 
 
-def _extract_droplet_id(output_text):
-    """Extract the droplet ID from CLI output like 'New droplet created with id: 12345'."""
+def _extract_instance_id(output_text):
+    """Extract the instance ID from CLI output like 'New droplet created with id: 12345'.
+
+    Handles both numeric IDs (DigitalOcean) and UUID IDs (Vultr).
+    """
     for line in output_text.splitlines():
         if "id:" in line.lower():
             parts = line.split("id:")
             if len(parts) >= 2:
                 candidate = parts[-1].strip()
-                if candidate.isdigit():
+                if candidate:
                     return candidate
     return None
 
@@ -129,10 +185,10 @@ def session_id():
 
 
 @pytest.fixture(scope="class")
-def droplet(config_file, session_id):
-    """Create a single droplet with all features and destroy it after all tests.
+def instance(config_file, session_id):
+    """Create a single instance with all features and destroy it after all tests.
 
-    The droplet is created with DNS, a machine type (cloud-init), a custom tag,
+    The instance is created with DNS, a machine type (cloud-init), a custom tag,
     and --wait-for-ip so that all aspects can be verified by individual tests.
     """
     name = _unique_name()
@@ -154,12 +210,12 @@ def droplet(config_file, session_id):
     )
     assert result.returncode == 0, f"create failed: {result.stderr}"
     create_out = result.stdout + result.stderr
-    droplet_id = _extract_droplet_id(create_out)
-    assert droplet_id, f"Could not find droplet id in output:\n{create_out}"
+    instance_id = _extract_instance_id(create_out)
+    assert instance_id, f"Could not find instance id in output:\n{create_out}"
 
     info = {
         "name": name,
-        "id": droplet_id,
+        "id": instance_id,
         "custom_tag": custom_tag,
         "create_out": create_out,
     }
@@ -172,28 +228,28 @@ def droplet(config_file, session_id):
         "destroy",
         "--no-confirm",
         "--delete-dns",
-        droplet_id,
+        instance_id,
         config_file=config_file,
         session_id=session_id,
     )
 
 
 # ---------------------------------------------------------------------------
-# Tests — one droplet, many assertions
+# Tests — one instance, many assertions
 # ---------------------------------------------------------------------------
 
 
-class TestDropletLifecycle:
-    """Create one droplet with all features and verify each aspect independently.
+class TestInstanceLifecycle:
+    """Create one instance with all features and verify each aspect independently.
 
-    A single droplet is created (via the class-scoped ``droplet`` fixture) with
+    A single instance is created (via the class-scoped ``instance`` fixture) with
     DNS, a machine type, and a custom tag.  Each test method verifies a different
-    aspect so that failures are reported individually.  The droplet is destroyed
+    aspect so that failures are reported individually.  The instance is destroyed
     automatically after all tests complete.
     """
 
-    def test_droplet_appears_in_list(self, droplet, config_file, session_id):
-        """Verify the droplet shows up in ``list`` with the correct name."""
+    def test_instance_appears_in_list(self, instance, config_file, session_id):
+        """Verify the instance shows up in ``list`` with the correct name."""
         result = run_machine(
             "list",
             "--output",
@@ -202,13 +258,13 @@ class TestDropletLifecycle:
             session_id=session_id,
         )
         assert result.returncode == 0, f"list failed: {result.stderr}"
-        droplets = json.loads(result.stdout)
-        matched = [d for d in droplets if str(d["id"]) == droplet["id"]]
-        assert len(matched) == 1, f"Expected 1 droplet with id {droplet['id']}, got {len(matched)}"
-        assert matched[0]["name"] == droplet["name"]
+        instances = json.loads(result.stdout)
+        matched = [i for i in instances if str(i["id"]) == instance["id"]]
+        assert len(matched) == 1, f"Expected 1 instance with id {instance['id']}, got {len(matched)}"
+        assert matched[0]["name"] == instance["name"]
 
-    def test_droplet_has_ip(self, droplet, config_file, session_id):
-        """Verify the droplet was assigned an IP address."""
+    def test_instance_has_ip(self, instance, config_file, session_id):
+        """Verify the instance was assigned an IP address."""
         result = run_machine(
             "list",
             "--output",
@@ -217,17 +273,17 @@ class TestDropletLifecycle:
             session_id=session_id,
         )
         assert result.returncode == 0
-        droplets = json.loads(result.stdout)
-        matched = [d for d in droplets if str(d["id"]) == droplet["id"]]
+        instances = json.loads(result.stdout)
+        matched = [i for i in instances if str(i["id"]) == instance["id"]]
         assert len(matched) == 1
-        assert matched[0]["ip"] is not None, "Droplet has no IP address"
+        assert matched[0]["ip"] is not None, "Instance has no IP address"
 
-    def test_dns_record_created(self, droplet, config_file, session_id):
-        """Verify that a DNS A record was created for the droplet."""
+    def test_dns_record_created(self, instance, config_file, session_id):
+        """Verify that a DNS A record was created for the instance."""
         result = run_machine(
             "list-domain",
             "--name",
-            droplet["name"],
+            instance["name"],
             "--output",
             "json",
             E2E_DNS_ZONE,
@@ -236,14 +292,14 @@ class TestDropletLifecycle:
         )
         assert result.returncode == 0, f"list-domain failed: {result.stderr}"
         records = json.loads(result.stdout)
-        a_records = [r for r in records if r.get("name") == droplet["name"] and r.get("type") == "A"]
-        assert len(a_records) >= 1, f"No A record found for {droplet['name']}.{E2E_DNS_ZONE}"
+        a_records = [r for r in records if r.get("name") == instance["name"] and r.get("type") == "A"]
+        assert len(a_records) >= 1, f"No A record found for {instance['name']}.{E2E_DNS_ZONE}"
 
-    def test_dns_zone_in_create_output(self, droplet):
+    def test_dns_zone_in_create_output(self, instance):
         """Verify that DNS zone was mentioned in the create output."""
-        assert E2E_DNS_ZONE in droplet["create_out"], f"DNS zone not mentioned in output:\n{droplet['create_out']}"
+        assert E2E_DNS_ZONE in instance["create_out"], f"DNS zone not mentioned in output:\n{instance['create_out']}"
 
-    def test_type_tag_applied(self, droplet, config_file, session_id):
+    def test_type_tag_applied(self, instance, config_file, session_id):
         """Verify that the machine type tag was applied and is filterable."""
         result = run_machine(
             "list",
@@ -255,23 +311,23 @@ class TestDropletLifecycle:
             session_id=session_id,
         )
         assert result.returncode == 0
-        droplets = json.loads(result.stdout)
-        matched = [d for d in droplets if str(d["id"]) == droplet["id"]]
-        assert len(matched) == 1, "Droplet not found when filtering by type e2e-basic"
+        instances = json.loads(result.stdout)
+        matched = [i for i in instances if str(i["id"]) == instance["id"]]
+        assert len(matched) == 1, "Instance not found when filtering by type e2e-basic"
         assert matched[0]["type"] == "e2e-basic", "Type tag mismatch"
 
-    def test_custom_tag_applied(self, droplet, config_file, session_id):
+    def test_custom_tag_applied(self, instance, config_file, session_id):
         """Verify that the custom tag was applied and is filterable."""
         result = run_machine(
             "list",
             "--tag",
-            droplet["custom_tag"],
+            instance["custom_tag"],
             "--output",
             "json",
             config_file=config_file,
             session_id=session_id,
         )
         assert result.returncode == 0
-        droplets = json.loads(result.stdout)
-        matched = [d for d in droplets if str(d["id"]) == droplet["id"]]
-        assert len(matched) == 1, f"Droplet not found with tag {droplet['custom_tag']}"
+        instances = json.loads(result.stdout)
+        matched = [i for i in instances if str(i["id"]) == instance["id"]]
+        assert len(matched) == 1, f"Instance not found with tag {instance['custom_tag']}"

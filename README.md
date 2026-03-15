@@ -1,7 +1,7 @@
 # machine
 CLI utility to create and manage VMs
 
-Initially supports only DigitalOcean using the [python-digitalocean](https://github.com/koalalorenzo/python-digitalocean) module.
+Supports [DigitalOcean](https://www.digitalocean.com/) and [Vultr](https://www.vultr.com/) hosting platforms.
 
 ## Prerequisites
 
@@ -55,7 +55,16 @@ sudo mv machine /usr/local/bin/
 ## Usage
 
 ### Config File
-Access token and other settings configured in the file `~/.machine/config.yml` :
+Access token and other settings configured in the file `~/.machine/config.yml`. The config file contains a provider section (either `digital-ocean` or `vultr`) and a `machines` section.
+
+If only one provider section is present, it is auto-detected. If multiple provider sections exist, add a `provider:` key to select one explicitly:
+
+```yaml
+provider: vultr
+```
+
+#### DigitalOcean Config
+
 ```yaml
 digital-ocean:
     access-token: dop_v1_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
@@ -75,10 +84,6 @@ machines:
         script-args: "-y"
 ```
 
-#### Config Reference
-
-**digital-ocean section:**
-
 | Key | Required | Description |
 |-----|----------|-------------|
 | `access-token` | Yes | DigitalOcean API access token |
@@ -88,6 +93,43 @@ machines:
 | `image` | Yes | Default image name (e.g. `ubuntu-22-04-x64`) |
 | `region` | Yes | Default region code (e.g. `nyc3`) |
 | `project` | No | DigitalOcean project name to assign new machines to |
+
+Supported regions: `NYC1`, `NYC3`, `AMS3`, `SFO2`, `SFO3`, `SGP1`, `LON1`, `FRA1`, `TOR1`, `BLR1`, `SYD1`
+
+#### Vultr Config
+
+```yaml
+vultr:
+    api-key: ${VULTR_API_KEY}
+    ssh-key: my-ssh-key-name
+    dns-zone: example.com
+    machine-size: vc2-1c-1gb
+    image: 2136
+    region: ewr
+
+machines:
+    example:
+        new-user-name: alice
+        script-dir: /opt/setup-scripts
+        script-url: https://raw.githubusercontent.com/example/setup-machine.sh
+        script-path: /opt/setup-scripts/setup-machine.sh
+        script-args: "-y"
+```
+
+| Key | Required | Description |
+|-----|----------|-------------|
+| `api-key` | Yes | Vultr API key (from https://my.vultr.com/settings/#settingsapi) |
+| `ssh-key` | Yes | Name of the SSH key in your Vultr account to use for new machines |
+| `dns-zone` | No | DNS zone for automatic DNS record creation/deletion |
+| `machine-size` | Yes | Vultr plan slug (e.g. `vc2-1c-1gb`). Use `machine list-plans` or the Vultr API to list available plans |
+| `image` | Yes | Vultr OS ID (numeric, e.g. `2136` for Ubuntu 24.04). Use `machine list-os` or the Vultr API to list available OS IDs |
+| `region` | Yes | Vultr region code (e.g. `ewr`) |
+
+Supported regions: `ewr`, `ord`, `dfw`, `sea`, `lax`, `atl`, `ams`, `lhr`, `fra`, `sjc`, `syd`, `nrt`, `cdg`, `icn`, `mia`, `sgp`, `sto`, `mex`, `mad`, `sao`, `del`, `hnl`, `yto`, `blr`, `jnb`, `bom`, `tlv`
+
+**Note:** Vultr does not have a "projects" concept, so the `project` config key and the `projects` command are not applicable when using the Vultr provider.
+
+#### Machines Section
 
 **machines section:**
 
@@ -115,8 +157,9 @@ Supported forms:
 - `${VAR}` — substitutes the value of `VAR`; errors if the variable is not set
 - `${VAR:-default}` — substitutes the value of `VAR`, or `default` if the variable is not set
 
-Example:
+Examples:
 ```yaml
+# DigitalOcean
 digital-ocean:
     access-token: ${DO_API_TOKEN}
     ssh-key: ${SSH_KEY_NAME:-my-ssh-key}
@@ -125,6 +168,17 @@ digital-ocean:
     image: ubuntu-22-04-x64
     region: ${DO_REGION:-nyc3}
     project: Infrastructure
+```
+
+```yaml
+# Vultr
+vultr:
+    api-key: ${VULTR_API_KEY}
+    ssh-key: ${SSH_KEY_NAME:-my-ssh-key}
+    dns-zone: example.com
+    machine-size: ${MACHINE_SIZE:-vc2-1c-1gb}
+    image: 2136
+    region: ${VULTR_REGION:-ewr}
 ```
 
 Substitution is applied to all string values throughout the config file, including the `machines` section.
@@ -179,7 +233,7 @@ Commands:
 
 #### create
 
-Create a new machine on DigitalOcean. By default, the machine is initialized with cloud-init (using the specified `--type` from config) and a DNS A record is created.
+Create a new machine on the configured provider. By default, the machine is initialized with cloud-init (using the specified `--type` from config) and a DNS A record is created.
 
 ```
 $ machine create --help
@@ -201,17 +255,15 @@ Options:
   -h, --help                       Show this message and exit.
 ```
 
-Supported regions: `NYC1`, `NYC3`, `AMS3`, `SFO2`, `SFO3`, `SGP1`, `LON1`, `FRA1`, `TOR1`, `BLR1`, `SYD1`
-
-When `--update-dns` is enabled (the default), the command waits for the droplet's IP address and creates an A record in the configured `dns-zone` with a 5-minute TTL.
+When `--update-dns` is enabled (the default), the command waits for the instance's IP address and creates an A record in the configured `dns-zone` with a 5-minute TTL.
 
 When `--initialize` is enabled (the default), a cloud-config user-data payload is generated that creates a non-root user with sudo access, installs the SSH key, and optionally downloads and runs an initialization script.
 
-If a `project` is configured, the machine is automatically assigned to that DigitalOcean project.
+If a `project` is configured (DigitalOcean only), the machine is automatically assigned to that project.
 
 #### destroy
 
-Destroy one or more machines by droplet ID. By default, requires confirmation and deletes associated DNS records.
+Destroy one or more machines by instance ID. By default, requires confirmation and deletes associated DNS records.
 
 ```
 $ machine destroy --help
@@ -282,7 +334,7 @@ Options:
   -h, --help                 Show this message and exit.
 ```
 
-In addition to the DigitalOcean droplet status, this command queries each machine at `http://<ip>:4242/cgi-bin/<status-check>` (default: `cloud-init-status`) for custom status information. If the endpoint is unreachable, the status is reported as `UNKNOWN`.
+In addition to the provider-reported instance status, this command queries each machine at `http://<ip>:4242/cgi-bin/<status-check>` (default: `cloud-init-status`) for custom status information. If the endpoint is unreachable, the status is reported as `UNKNOWN`.
 
 #### list-domain
 
@@ -312,15 +364,15 @@ Output formats:
 
 #### domains
 
-List all DNS domains in your DigitalOcean account. Takes no options.
+List all DNS domains in your provider account. Takes no options.
 
 #### ssh-keys
 
-List SSH keys in your DigitalOcean account. Output format: `id: name (fingerprint)`
+List SSH keys in your provider account. Output format: `id: name (fingerprint)`
 
 #### projects
 
-List DigitalOcean project names. Takes no options.
+List project names (DigitalOcean only). Takes no options.
 
 #### types
 
