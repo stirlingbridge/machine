@@ -30,6 +30,12 @@ Homepage = "https://github.com/stirlingbridge/machine"
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
+[tool.pytest.ini_options]
+markers = [
+    "e2e: end-to-end tests that create real resources on DigitalOcean (require E2E_* env vars)",
+]
+addopts = "-m 'not e2e'"
+
 [dependency-groups]
 dev = [
     "flake8",
