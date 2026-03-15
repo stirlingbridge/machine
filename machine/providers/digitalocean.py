@@ -23,11 +23,14 @@ VALID_IMAGES = [
 
 
 def _droplet_to_vm(droplet) -> VM:
+    region = droplet.region
+    if isinstance(region, dict):
+        region = region.get("slug")
     return VM(
         id=str(droplet.id),
         name=droplet.name,
         tags=droplet.tags,
-        region=droplet.region["slug"] if droplet.region else None,
+        region=region,
         ip_address=droplet.ip_address,
         status=droplet.status,
     )
