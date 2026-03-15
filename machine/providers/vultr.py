@@ -27,6 +27,7 @@ def _instance_to_vm(instance) -> VM:
 
 class VultrProvider(CloudProvider):
     def __init__(self, provider_config):
+        info("WARNING: Vultr support is experimental and has not been fully verified. Use with caution.")
         if "api-key" not in provider_config:
             fatal_error("Required key 'api-key' not found in 'vultr' section of config file")
         self._api_key = provider_config["api-key"]
