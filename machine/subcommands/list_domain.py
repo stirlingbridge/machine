@@ -1,5 +1,4 @@
 import click
-import digitalocean
 import json
 
 from machine.log import fatal_error, output
@@ -17,11 +16,11 @@ def print_quiet(records):
         output(record.name)
 
 
-def print_json(records, droplets, zone):
+def print_json(records, vms, zone):
     simplified = []
     for r in records:
-        droplet = next((d for d in droplets if r.data == d.ip_address), None)
-        simplified.append(dns_record_to_json_obj(r, zone, droplet))
+        vm = next((v for v in vms if r.data == v.ip_address), None)
+        simplified.append(dns_record_to_json_obj(r, zone, vm))
     output(json.dumps(simplified))
 
 
@@ -40,12 +39,14 @@ def print_json(records, droplets, zone):
 @click.pass_context
 def command(context, name, type, output, quiet, all, zone):
     command_context: MainCmdCtx = context.obj
+    provider = command_context.provider
+
     if not zone:
         zone = command_context.config.dns_zone
     if not zone:
         fatal_error("Error: no DNS zone specified.")
-    domain = digitalocean.Domain(token=command_context.config.access_token, name=zone)
-    records = domain.get_records()
+
+    records = provider.get_dns_records(zone)
 
     if type:
         if type != "*":
@@ -53,17 +54,16 @@ def command(context, name, type, output, quiet, all, zone):
     else:
         records = filter(lambda r: r.type in ["A", "AAAA"], records)
 
-    manager = digitalocean.Manager(token=command_context.config.access_token)
     if all:
-        droplets = manager.get_all_droplets()
+        vms = provider.list_vms()
     else:
-        droplets = manager.get_all_droplets(tag_name=TAG_MACHINE_SESSION_PREFIX + command_context.session_id)
-        droplet_ips = [d.ip_address for d in droplets]
-        records = filter(lambda r: r.data in droplet_ips, records)
+        vms = provider.list_vms(tag=TAG_MACHINE_SESSION_PREFIX + command_context.session_id)
+        vm_ips = [v.ip_address for v in vms]
+        records = filter(lambda r: r.data in vm_ips, records)
 
     records = list(records)
     if output == "json":
-        print_json(records, droplets, zone)
+        print_json(records, vms, zone)
     elif quiet:
         print_quiet(records)
     else:

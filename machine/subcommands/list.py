@@ -1,57 +1,57 @@
 import click
 import json
-import digitalocean
 
 from machine.log import fatal_error, output
 from machine.types import MainCmdCtx, TAG_MACHINE_TYPE_PREFIX, TAG_MACHINE_SESSION_PREFIX
-from machine.util import get_machine_type, is_machine_created, is_same_session, droplet_to_json_obj
+from machine.util import get_machine_type, is_machine_created, is_same_session, vm_to_json_obj
 
 
-def print_normal(droplets):
-    for droplet in droplets:
-        region = droplet.region["slug"] if droplet.region else "unknown"
-        output(f"{droplet.name} ({droplet.id}, {region}, {get_machine_type(droplet)}): {droplet.ip_address}")
+def print_normal(vms):
+    for vm in vms:
+        region = vm.region if vm.region else "unknown"
+        output(f"{vm.name} ({vm.id}, {region}, {get_machine_type(vm)}): {vm.ip_address}")
 
 
-def print_quiet(droplets):
-    for droplet in droplets:
-        output(droplet.id)
+def print_quiet(vms):
+    for vm in vms:
+        output(vm.id)
 
 
-def print_json(droplets):
-    output(json.dumps([droplet_to_json_obj(d) for d in droplets]))
+def print_json(vms):
+    output(json.dumps([vm_to_json_obj(v) for v in vms]))
 
 
-def get_droplets(command_context, id=None, name=None, tag=None, type=None, region=None, all=False):
-    manager = digitalocean.Manager(token=command_context.config.access_token)
-    droplets = []
+def get_vms(command_context, id=None, name=None, tag=None, type=None, region=None, all=False):
+    provider = command_context.provider
+
+    vms = []
     if id:
-        droplet = manager.get_droplet(id)
-        if droplet:
-            droplets.append(droplet)
+        vm = provider.get_vm(id)
+        if vm:
+            vms.append(vm)
 
     if all:
-        droplets = manager.get_all_droplets()
+        vms = provider.list_vms()
     else:
-        droplets = manager.get_all_droplets(tag_name=TAG_MACHINE_SESSION_PREFIX + command_context.session_id)
+        vms = provider.list_vms(tag=TAG_MACHINE_SESSION_PREFIX + command_context.session_id)
 
     # we can't combine most filters over the API, so we also filter ourselves
     if name:
-        droplets = filter(lambda d: d.name == name, droplets)
+        vms = filter(lambda v: v.name == name, vms)
 
     if tag:
-        droplets = filter(lambda d: tag in d.tags, droplets)
+        vms = filter(lambda v: tag in v.tags, vms)
 
     if type:
-        droplets = filter(lambda d: TAG_MACHINE_TYPE_PREFIX + type.lower() in d.tags, droplets)
+        vms = filter(lambda v: TAG_MACHINE_TYPE_PREFIX + type.lower() in v.tags, vms)
 
     if region:
-        droplets = filter(lambda d: d.region and region == d.region["slug"], droplets)
+        vms = filter(lambda v: v.region and region == v.region, vms)
 
     if not all:
-        droplets = filter(lambda d: is_machine_created(d) and is_same_session(command_context, d), droplets)
+        vms = filter(lambda v: is_machine_created(v) and is_same_session(command_context, v), vms)
 
-    return list(droplets)
+    return list(vms)
 
 
 @click.command(help="List machines")
@@ -78,13 +78,13 @@ def get_droplets(command_context, id=None, name=None, tag=None, type=None, regio
 def command(context, id, name, tag, type, region, all, output, quiet, unique):
     command_context: MainCmdCtx = context.obj
 
-    droplets = get_droplets(command_context, id, name, tag, type, region, all)
-    if unique and len(droplets) > 1:
-        fatal_error(f"ERROR: --unique match required but {len(droplets)} matches found.")
+    vms = get_vms(command_context, id, name, tag, type, region, all)
+    if unique and len(vms) > 1:
+        fatal_error(f"ERROR: --unique match required but {len(vms)} matches found.")
 
     if output == "json":
-        print_json(droplets)
+        print_json(vms)
     elif quiet:
-        print_quiet(droplets)
+        print_quiet(vms)
     else:
-        print_normal(droplets)
+        print_normal(vms)

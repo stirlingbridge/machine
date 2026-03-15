@@ -6,6 +6,7 @@ from machine import config
 from machine import constants
 from machine.di import d
 from machine.log import output
+from machine.providers import create_provider
 from machine.subcommands import create, destroy, list, projects, ssh_keys, domains, list_domain, types, status
 from machine.types import CliOptions, MainCmdCtx
 from machine.util import load_session_id
@@ -30,7 +31,9 @@ def main(context, debug, quiet, verbose, dry_run, config_file, session_id):
     # and should work even when no config file exists (#25)
     if context.invoked_subcommand == "version":
         return
-    main_context = MainCmdCtx(config.get(config_file), session_id)
+    cfg = config.get(config_file)
+    provider = create_provider(cfg.provider_name, cfg.provider_config)
+    main_context = MainCmdCtx(cfg, session_id, provider)
     context.obj = main_context
 
 
