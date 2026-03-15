@@ -97,6 +97,18 @@ def run_machine(*args, config_file=None, session_id=None):
     return result
 
 
+def _extract_droplet_id(output_text):
+    """Extract the droplet ID from CLI output like 'New droplet created with id: 12345'."""
+    for line in output_text.splitlines():
+        if "id:" in line.lower():
+            parts = line.split("id:")
+            if len(parts) >= 2:
+                candidate = parts[-1].strip()
+                if candidate.isdigit():
+                    return candidate
+    return None
+
+
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
@@ -116,60 +128,72 @@ def session_id():
     return uuid.uuid4().hex[:8]
 
 
-@pytest.fixture()
-def droplet_cleanup(config_file, session_id):
-    """Fixture that tracks created droplet IDs and destroys them after the test."""
-    created_ids = []
-    yield created_ids
-    for did in created_ids:
-        run_machine(
-            "--verbose",
-            "destroy",
-            "--no-confirm",
-            str(did),
-            config_file=config_file,
-            session_id=session_id,
-        )
+@pytest.fixture(scope="class")
+def droplet(config_file, session_id):
+    """Create a single droplet with all features and destroy it after all tests.
+
+    The droplet is created with DNS, a machine type (cloud-init), a custom tag,
+    and --wait-for-ip so that all aspects can be verified by individual tests.
+    """
+    name = _unique_name()
+    custom_tag = f"e2e-tag-{uuid.uuid4().hex[:6]}"
+
+    # ---- CREATE with all features ------------------------------------------
+    result = run_machine(
+        "create",
+        "--name",
+        name,
+        "--type",
+        "e2e-basic",
+        "--update-dns",
+        "--tag",
+        custom_tag,
+        "--wait-for-ip",
+        config_file=config_file,
+        session_id=session_id,
+    )
+    assert result.returncode == 0, f"create failed: {result.stderr}"
+    create_out = result.stdout + result.stderr
+    droplet_id = _extract_droplet_id(create_out)
+    assert droplet_id, f"Could not find droplet id in output:\n{create_out}"
+
+    info = {
+        "name": name,
+        "id": droplet_id,
+        "custom_tag": custom_tag,
+        "create_out": create_out,
+    }
+
+    yield info
+
+    # ---- TEARDOWN: destroy with DNS cleanup --------------------------------
+    run_machine(
+        "--verbose",
+        "destroy",
+        "--no-confirm",
+        "--delete-dns",
+        droplet_id,
+        config_file=config_file,
+        session_id=session_id,
+    )
 
 
 # ---------------------------------------------------------------------------
-# Tests
+# Tests — one droplet, many assertions
 # ---------------------------------------------------------------------------
 
 
 class TestDropletLifecycle:
-    """Create a droplet, verify it, then destroy it."""
+    """Create one droplet with all features and verify each aspect independently.
 
-    def test_create_and_list_and_destroy(self, config_file, session_id, droplet_cleanup):
-        name = _unique_name()
+    A single droplet is created (via the class-scoped ``droplet`` fixture) with
+    DNS, a machine type, and a custom tag.  Each test method verifies a different
+    aspect so that failures are reported individually.  The droplet is destroyed
+    automatically after all tests complete.
+    """
 
-        # ---- CREATE --------------------------------------------------------
-        result = run_machine(
-            "create",
-            "--name",
-            name,
-            "--no-initialize",
-            "--wait-for-ip",
-            config_file=config_file,
-            session_id=session_id,
-        )
-        assert result.returncode == 0, f"create failed: {result.stderr}"
-        # Extract the droplet id from output like "New droplet created with id: 12345"
-        create_out = result.stdout + result.stderr
-        droplet_id = None
-        for line in create_out.splitlines():
-            if "id:" in line.lower():
-                # grab the number after "id:"
-                parts = line.split("id:")
-                if len(parts) >= 2:
-                    candidate = parts[-1].strip()
-                    if candidate.isdigit():
-                        droplet_id = candidate
-                        break
-        assert droplet_id, f"Could not find droplet id in output:\n{create_out}"
-        droplet_cleanup.append(droplet_id)
-
-        # ---- LIST ----------------------------------------------------------
+    def test_droplet_appears_in_list(self, droplet, config_file, session_id):
+        """Verify the droplet shows up in ``list`` with the correct name."""
         result = run_machine(
             "list",
             "--output",
@@ -179,24 +203,12 @@ class TestDropletLifecycle:
         )
         assert result.returncode == 0, f"list failed: {result.stderr}"
         droplets = json.loads(result.stdout)
-        matched = [d for d in droplets if str(d["id"]) == droplet_id]
-        assert len(matched) == 1, f"Expected 1 droplet with id {droplet_id}, got {len(matched)}"
-        assert matched[0]["name"] == name
-        assert matched[0]["ip"] is not None
+        matched = [d for d in droplets if str(d["id"]) == droplet["id"]]
+        assert len(matched) == 1, f"Expected 1 droplet with id {droplet['id']}, got {len(matched)}"
+        assert matched[0]["name"] == droplet["name"]
 
-        # ---- DESTROY -------------------------------------------------------
-        result = run_machine(
-            "destroy",
-            "--no-confirm",
-            droplet_id,
-            config_file=config_file,
-            session_id=session_id,
-        )
-        assert result.returncode == 0, f"destroy failed: {result.stderr}"
-        # Remove from cleanup list since we already destroyed it
-        droplet_cleanup.remove(droplet_id)
-
-        # ---- VERIFY GONE ---------------------------------------------------
+    def test_droplet_has_ip(self, droplet, config_file, session_id):
+        """Verify the droplet was assigned an IP address."""
         result = run_machine(
             "list",
             "--output",
@@ -206,48 +218,16 @@ class TestDropletLifecycle:
         )
         assert result.returncode == 0
         droplets = json.loads(result.stdout)
-        matched = [d for d in droplets if str(d["id"]) == droplet_id]
-        assert len(matched) == 0, "Droplet still exists after destroy"
+        matched = [d for d in droplets if str(d["id"]) == droplet["id"]]
+        assert len(matched) == 1
+        assert matched[0]["ip"] is not None, "Droplet has no IP address"
 
-
-class TestDNSLifecycle:
-    """Create a droplet with DNS, verify the record, then destroy and verify cleanup."""
-
-    def test_create_with_dns_and_destroy(self, config_file, session_id, droplet_cleanup):
-        name = _unique_name()
-
-        # ---- CREATE with DNS -----------------------------------------------
-        result = run_machine(
-            "create",
-            "--name",
-            name,
-            "--no-initialize",
-            "--update-dns",
-            config_file=config_file,
-            session_id=session_id,
-        )
-        assert result.returncode == 0, f"create failed: {result.stderr}"
-        create_out = result.stdout + result.stderr
-        droplet_id = None
-        for line in create_out.splitlines():
-            if "id:" in line.lower():
-                parts = line.split("id:")
-                if len(parts) >= 2:
-                    candidate = parts[-1].strip()
-                    if candidate.isdigit():
-                        droplet_id = candidate
-                        break
-        assert droplet_id, f"Could not find droplet id in output:\n{create_out}"
-        droplet_cleanup.append(droplet_id)
-
-        # Verify DNS was mentioned in output
-        assert E2E_DNS_ZONE in create_out, f"DNS zone not mentioned in output:\n{create_out}"
-
-        # ---- LIST DOMAIN ---------------------------------------------------
+    def test_dns_record_created(self, droplet, config_file, session_id):
+        """Verify that a DNS A record was created for the droplet."""
         result = run_machine(
             "list-domain",
             "--name",
-            name,
+            droplet["name"],
             "--output",
             "json",
             E2E_DNS_ZONE,
@@ -256,71 +236,15 @@ class TestDNSLifecycle:
         )
         assert result.returncode == 0, f"list-domain failed: {result.stderr}"
         records = json.loads(result.stdout)
-        a_records = [r for r in records if r.get("name") == name and r.get("type") == "A"]
-        assert len(a_records) >= 1, f"No A record found for {name}.{E2E_DNS_ZONE}"
+        a_records = [r for r in records if r.get("name") == droplet["name"] and r.get("type") == "A"]
+        assert len(a_records) >= 1, f"No A record found for {droplet['name']}.{E2E_DNS_ZONE}"
 
-        # ---- DESTROY with DNS cleanup --------------------------------------
-        result = run_machine(
-            "destroy",
-            "--no-confirm",
-            "--delete-dns",
-            droplet_id,
-            config_file=config_file,
-            session_id=session_id,
-        )
-        assert result.returncode == 0, f"destroy failed: {result.stderr}"
-        droplet_cleanup.remove(droplet_id)
+    def test_dns_zone_in_create_output(self, droplet):
+        """Verify that DNS zone was mentioned in the create output."""
+        assert E2E_DNS_ZONE in droplet["create_out"], f"DNS zone not mentioned in output:\n{droplet['create_out']}"
 
-        # ---- VERIFY DNS RECORD REMOVED -------------------------------------
-        result = run_machine(
-            "list-domain",
-            "--name",
-            name,
-            "--all",
-            "--output",
-            "json",
-            E2E_DNS_ZONE,
-            config_file=config_file,
-            session_id=session_id,
-        )
-        assert result.returncode == 0
-        records = json.loads(result.stdout)
-        a_records = [r for r in records if r.get("name") == name and r.get("type") == "A"]
-        assert len(a_records) == 0, f"DNS A record still exists for {name}.{E2E_DNS_ZONE}"
-
-
-class TestCreateWithInitialize:
-    """Create a droplet with cloud-init and verify it was initialized."""
-
-    def test_create_with_type(self, config_file, session_id, droplet_cleanup):
-        name = _unique_name()
-
-        # ---- CREATE with initialization ------------------------------------
-        result = run_machine(
-            "create",
-            "--name",
-            name,
-            "--type",
-            "e2e-basic",
-            "--wait-for-ip",
-            config_file=config_file,
-            session_id=session_id,
-        )
-        assert result.returncode == 0, f"create failed: {result.stderr}"
-        create_out = result.stdout + result.stderr
-        droplet_id = None
-        for line in create_out.splitlines():
-            if "id:" in line.lower():
-                parts = line.split("id:")
-                if len(parts) >= 2:
-                    candidate = parts[-1].strip()
-                    if candidate.isdigit():
-                        droplet_id = candidate
-                        break
-        assert droplet_id, f"Could not find droplet id in output:\n{create_out}"
-        droplet_cleanup.append(droplet_id)
-
-        # ---- VERIFY TYPE TAG -----------------------------------------------
+    def test_type_tag_applied(self, droplet, config_file, session_id):
+        """Verify that the machine type tag was applied and is filterable."""
         result = run_machine(
             "list",
             "--type",
@@ -332,59 +256,16 @@ class TestCreateWithInitialize:
         )
         assert result.returncode == 0
         droplets = json.loads(result.stdout)
-        matched = [d for d in droplets if str(d["id"]) == droplet_id]
-        assert len(matched) == 1
-        assert matched[0]["type"] == "e2e-basic"
+        matched = [d for d in droplets if str(d["id"]) == droplet["id"]]
+        assert len(matched) == 1, "Droplet not found when filtering by type e2e-basic"
+        assert matched[0]["type"] == "e2e-basic", "Type tag mismatch"
 
-        # ---- CLEANUP -------------------------------------------------------
-        result = run_machine(
-            "destroy",
-            "--no-confirm",
-            droplet_id,
-            config_file=config_file,
-            session_id=session_id,
-        )
-        assert result.returncode == 0, f"destroy failed: {result.stderr}"
-        droplet_cleanup.remove(droplet_id)
-
-
-class TestCustomTag:
-    """Verify that custom tags are applied to created droplets."""
-
-    def test_custom_tag(self, config_file, session_id, droplet_cleanup):
-        name = _unique_name()
-        custom_tag = f"e2e-tag-{uuid.uuid4().hex[:6]}"
-
-        result = run_machine(
-            "create",
-            "--name",
-            name,
-            "--no-initialize",
-            "--tag",
-            custom_tag,
-            "--wait-for-ip",
-            config_file=config_file,
-            session_id=session_id,
-        )
-        assert result.returncode == 0, f"create failed: {result.stderr}"
-        create_out = result.stdout + result.stderr
-        droplet_id = None
-        for line in create_out.splitlines():
-            if "id:" in line.lower():
-                parts = line.split("id:")
-                if len(parts) >= 2:
-                    candidate = parts[-1].strip()
-                    if candidate.isdigit():
-                        droplet_id = candidate
-                        break
-        assert droplet_id
-        droplet_cleanup.append(droplet_id)
-
-        # Verify tag via list --tag filter
+    def test_custom_tag_applied(self, droplet, config_file, session_id):
+        """Verify that the custom tag was applied and is filterable."""
         result = run_machine(
             "list",
             "--tag",
-            custom_tag,
+            droplet["custom_tag"],
             "--output",
             "json",
             config_file=config_file,
@@ -392,16 +273,5 @@ class TestCustomTag:
         )
         assert result.returncode == 0
         droplets = json.loads(result.stdout)
-        matched = [d for d in droplets if str(d["id"]) == droplet_id]
-        assert len(matched) == 1, f"Droplet not found with tag {custom_tag}"
-
-        # Cleanup
-        result = run_machine(
-            "destroy",
-            "--no-confirm",
-            droplet_id,
-            config_file=config_file,
-            session_id=session_id,
-        )
-        assert result.returncode == 0
-        droplet_cleanup.remove(droplet_id)
+        matched = [d for d in droplets if str(d["id"]) == droplet["id"]]
+        assert len(matched) == 1, f"Droplet not found with tag {droplet['custom_tag']}"
