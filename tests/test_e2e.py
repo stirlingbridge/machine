@@ -9,18 +9,17 @@ Required environment variables:
     E2E_DO_TOKEN    - DigitalOcean API token
     E2E_SSH_KEY     - Name of an SSH key already registered in DO
     E2E_DNS_ZONE    - DNS zone managed by DO (e.g. "test.example.com")
+    E2E_PROJECT     - DO project name to assign droplets to
 
 Optional environment variables:
     E2E_REGION      - Region slug (default: nyc1)
     E2E_IMAGE       - Image slug (default: ubuntu-24-04-x64)
     E2E_SIZE        - Machine size slug (default: s-1vcpu-512mb-10gb)
-    E2E_PROJECT     - DO project name to assign droplets to
 """
 
 import json
 import os
 import subprocess
-import textwrap
 import uuid
 
 import pytest
@@ -36,7 +35,7 @@ E2E_DNS_ZONE = os.environ.get("E2E_DNS_ZONE")
 E2E_REGION = os.environ.get("E2E_REGION", "nyc1")
 E2E_IMAGE = os.environ.get("E2E_IMAGE", "ubuntu-24-04-x64")
 E2E_SIZE = os.environ.get("E2E_SIZE", "s-1vcpu-512mb-10gb")
-E2E_PROJECT = os.environ.get("E2E_PROJECT", "")
+E2E_PROJECT = os.environ.get("E2E_PROJECT")
 
 pytestmark = pytest.mark.e2e
 
@@ -47,6 +46,8 @@ if not E2E_SSH_KEY:
     _MISSING.append("E2E_SSH_KEY")
 if not E2E_DNS_ZONE:
     _MISSING.append("E2E_DNS_ZONE")
+if not E2E_PROJECT:
+    _MISSING.append("E2E_PROJECT")
 
 if _MISSING:
     pytestmark = [
@@ -75,20 +76,11 @@ def _write_config(path, **overrides):
         "image": E2E_IMAGE,
         "region": E2E_REGION,
     }
-    if E2E_PROJECT:
-        cfg["project"] = E2E_PROJECT
+    cfg["project"] = E2E_PROJECT
     cfg.update(overrides)
 
     do_lines = "\n".join(f"  {k}: {v}" for k, v in cfg.items())
-    content = textwrap.dedent(
-        f"""\
-        digital-ocean:
-        {do_lines}
-        machines:
-          e2e-basic:
-            new-user-name: e2euser
-        """
-    )
+    content = f"digital-ocean:\n{do_lines}\nmachines:\n  e2e-basic:\n    new-user-name: e2euser\n"
     with open(path, "w") as f:
         f.write(content)
 
