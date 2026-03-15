@@ -15,7 +15,8 @@ class CliOptions:
 
 @dataclass
 class Config:
-    access_token: str
+    provider_name: str
+    provider_config: dict
     ssh_key: str
     dns_zone: str
     machine_size: str
@@ -28,6 +29,7 @@ class Config:
 class MainCmdCtx:
     config: Config
     session_id: str
+    provider: object  # CloudProvider instance
 
 
 @dataclass

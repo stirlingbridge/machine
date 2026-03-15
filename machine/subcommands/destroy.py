@@ -1,9 +1,8 @@
 import click
-import digitalocean
 
 from machine.di import d
 from machine.log import debug, fatal_error, output
-from machine.util import dnsRecordIdFromName, is_machine_created
+from machine.util import is_machine_created
 from machine.types import MainCmdCtx
 
 from machine.util import is_same_session
@@ -23,44 +22,39 @@ from machine.util import is_same_session
 def command(context, confirm, delete_dns, all, droplet_ids):
     command_context: MainCmdCtx = context.obj
     config = command_context.config
-    manager = digitalocean.Manager(token=config.access_token)
+    provider = command_context.provider
+
     for droplet_id in droplet_ids:
-        try:
-            droplet = manager.get_droplet(droplet_id)
-        except digitalocean.NotFoundError:
-            fatal_error(f"Error: machine with id {droplet_id} not found")
-        name = droplet.name
+        vm = provider.get_vm(droplet_id)
+        name = vm.name
 
-        if not is_machine_created(droplet) and not all:
-            fatal_error(f'ERROR: Cannot destroy droplet "{name}" (id: {droplet.id}), it was not created by machine.')
+        if not is_machine_created(vm) and not all:
+            fatal_error(f'ERROR: Cannot destroy droplet "{name}" (id: {vm.id}), it was not created by machine.')
 
-        if not is_same_session(command_context, droplet) and not all:
+        if not is_same_session(command_context, vm) and not all:
             fatal_error(
-                f'ERROR: Cannot destroy droplet "{name}" (id: {droplet.id}), it was created by a different session of machine.'
+                f'ERROR: Cannot destroy droplet "{name}" (id: {vm.id}), it was created by a different session of machine.'
             )
 
         if confirm:
             output(
                 "Type YES (not y or yes or Yes) to confirm that you want to permanently"
-                f' DELETE/DESTROY droplet "{name}" (id: {droplet.id})'
+                f' DELETE/DESTROY droplet "{name}" (id: {vm.id})'
             )
             confirmation = input()
             if confirmation != "YES":
                 fatal_error("Destroy operation aborted, not confirmed by user")
-        result = droplet.destroy()
+
+        result = provider.destroy_vm(droplet_id)
 
         if result and delete_dns and config.dns_zone:
             zone = config.dns_zone
             if d.opt.debug:
                 debug(f"Deleting host record {name}.{zone}")
-            domain = digitalocean.Domain(token=config.access_token, name=zone)
-            if not domain:
-                fatal_error(f"Error: Domain {domain} does not exist, machine destroyed but DNS record not removed")
-            record_id = dnsRecordIdFromName(domain, name)
-            if record_id:
+            deleted = provider.delete_dns_record(zone, name)
+            if deleted:
                 if d.opt.debug:
-                    debug(f"Deleting dns record id={record_id}")
-                domain.delete_domain_record(id=record_id)
+                    debug(f"Deleted dns record for {name}.{zone}")
             else:
                 if d.opt.debug:
                     debug(f"No dns record found for {name}.{zone}")

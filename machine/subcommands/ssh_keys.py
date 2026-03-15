@@ -1,5 +1,4 @@
 import click
-import digitalocean
 from machine.log import output
 from machine.types import MainCmdCtx
 
@@ -8,7 +7,7 @@ from machine.types import MainCmdCtx
 @click.pass_context
 def command(context):
     command_context: MainCmdCtx = context.obj
-    manager = digitalocean.Manager(token=command_context.config.access_token)
-    my_keys = manager.get_all_sshkeys()
-    for key in my_keys:
+    provider = command_context.provider
+    keys = provider.list_ssh_keys()
+    for key in keys:
         output(f"{key.id}: {key.name} ({key.fingerprint})")

@@ -1,11 +1,11 @@
 from expandvars import expand
 
 from machine.log import fatal_error
+from machine.provider import CloudProvider
 from machine.types import MachineConfig
-from machine.util import Manager, sshKeyFromName
 
 
-def get_user_data(manager: Manager, ssh_key_name: str, fqdn: str, machine_config: MachineConfig):
+def get_user_data(provider: CloudProvider, ssh_key_name: str, fqdn: str, machine_config: MachineConfig):
     if not fqdn:
         fqdn = ""
 
@@ -13,9 +13,9 @@ def get_user_data(manager: Manager, ssh_key_name: str, fqdn: str, machine_config
     if not script_args:
         script_args = ""
 
-    ssh_key = sshKeyFromName(manager, ssh_key_name)
+    ssh_key = provider.get_ssh_key(ssh_key_name)
     if not ssh_key:
-        fatal_error(f"Error: SSH key '{ssh_key_name}' not found in DigitalOcean")
+        fatal_error(f"Error: SSH key '{ssh_key_name}' not found in {provider.provider_name}")
     ssh_public_key = ssh_key.public_key
     escaped_args = script_args.replace('"', '\\"')
 

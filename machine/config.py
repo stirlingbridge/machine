@@ -6,6 +6,7 @@ from machine.factory import yaml
 from machine.log import fatal_error, debug
 from machine.types import Config, MachineConfig
 from machine import constants
+from machine.providers import KNOWN_PROVIDERS
 
 _env_var_pattern = re.compile(r"\$\{([^}]+)\}")
 
@@ -57,17 +58,34 @@ def _require_key(d, key, section_name):
 
 def get(config_file_name: str) -> Config:
     config = _load_config_data(config_file_name)
-    if "digital-ocean" not in config:
-        fatal_error("Required 'digital-ocean' section not found in config file")
-    config_do = config["digital-ocean"]
+
+    # Auto-detect provider from config sections
+    provider_name = config.get("provider")
+    if not provider_name:
+        found = [p for p in KNOWN_PROVIDERS if p in config]
+        if len(found) == 0:
+            fatal_error(
+                "No provider section found in config file. Expected one of: " + ", ".join(KNOWN_PROVIDERS)
+            )
+        if len(found) > 1:
+            fatal_error(
+                "Multiple provider sections found in config file. Please add a 'provider:' key to select one."
+            )
+        provider_name = found[0]
+
+    if provider_name not in config:
+        fatal_error(f"Provider '{provider_name}' specified but no '{provider_name}' section found in config file")
+
+    provider_config = config[provider_name]
     return Config(
-        _require_key(config_do, "access-token", "digital-ocean"),
-        _require_key(config_do, "ssh-key", "digital-ocean"),
-        config_do.get("dns-zone"),
-        _require_key(config_do, "machine-size", "digital-ocean"),
-        _require_key(config_do, "image", "digital-ocean"),
-        _require_key(config_do, "region", "digital-ocean"),
-        _require_key(config_do, "project", "digital-ocean"),
+        provider_name=provider_name,
+        provider_config=provider_config,
+        ssh_key=_require_key(provider_config, "ssh-key", provider_name),
+        dns_zone=provider_config.get("dns-zone"),
+        machine_size=_require_key(provider_config, "machine-size", provider_name),
+        image=_require_key(provider_config, "image", provider_name),
+        region=_require_key(provider_config, "region", provider_name),
+        project=provider_config.get("project"),
     )
 
 

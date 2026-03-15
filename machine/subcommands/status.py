@@ -3,7 +3,7 @@ import json
 import requests
 
 from machine.log import output
-from machine.subcommands.list import get_droplets
+from machine.subcommands.list import get_vms
 from machine.types import MainCmdCtx
 
 
@@ -37,13 +37,13 @@ def print_json(statuses):
 def command(context, id, name, tag, type, region, all, output, quiet, status_check):
     command_context: MainCmdCtx = context.obj
 
-    droplets = get_droplets(command_context, id, name, tag, type, region, all)
+    vms = get_vms(command_context, id, name, tag, type, region, all)
 
     statuses = []
-    for d in droplets:
-        status = {"name": d.name, "id": d.id, "droplet-status": d.status, status_check: "UNKNOWN"}
+    for vm in vms:
+        status = {"name": vm.name, "id": vm.id, "droplet-status": vm.status, status_check: "UNKNOWN"}
         try:
-            r = requests.get(f"http://{d.ip_address}:4242/cgi-bin/{status_check}")
+            r = requests.get(f"http://{vm.ip_address}:4242/cgi-bin/{status_check}")
             if 200 == r.status_code:
                 status[status_check] = r.json()["status"]
         except:  # noqa: E722
