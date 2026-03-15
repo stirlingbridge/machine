@@ -23,6 +23,7 @@ jobs:
       - name: "Run E2E tests"
         env:
           E2E_DO_TOKEN: ${{ secrets.E2E_DO_TOKEN }}
-          E2E_SSH_KEY: ${{ secrets.E2E_SSH_KEY }}
-          E2E_DNS_ZONE: ${{ secrets.E2E_DNS_ZONE }}
+          E2E_SSH_KEY: ${{ vars.E2E_SSH_KEY }}
+          E2E_DNS_ZONE: ${{ vars.E2E_DNS_ZONE }}
+          E2E_PROJECT: ${{ vars.E2E_PROJECT }}
         run: uv run pytest tests/test_e2e.py -v -m e2e
