@@ -18,7 +18,7 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 uv sync
 ```
 
-This creates a `.venv` virtual environment and installs all dependencies (including dev tools like flake8 and black).
+This creates a `.venv` virtual environment and installs all dependencies (including dev tools like ruff).
 
 Run the CLI during development:
 ```
@@ -27,7 +27,7 @@ uv run machine --help
 
 Run the linter:
 ```
-uv run flake8
+uv run ruff check machine/
 ```
 
 ## Build

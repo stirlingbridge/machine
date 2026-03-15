@@ -1,8 +1,9 @@
 #!/bin/bash
 
 if [[ "$1" == "--fix" ]]; then
-  LINE_LENGTH=$(grep 'max-line-length' .flake8 | cut -d'=' -f2 | awk '{ print $1 }')
-  uv run black -l ${LINE_LENGTH:-132} machine/
+  uv run ruff format machine/
+  uv run ruff check --fix machine/
+else
+  uv run ruff format --check machine/
+  uv run ruff check machine/
 fi
-
-uv run flake8
