@@ -98,7 +98,7 @@ class TestMissingConfigSections:
     def config_dir(self, tmp_path):
         return tmp_path
 
-    def test_missing_digital_ocean_section(self, config_dir):
+    def test_missing_provider_section(self, config_dir):
         config_file = config_dir / "config.yml"
         write_config(
             config_file,
@@ -111,6 +111,7 @@ class TestMissingConfigSections:
         result = run_machine("--config-file", str(config_file), "types")
         assert result.returncode != 0
         assert "digital-ocean" in result.stderr
+        assert "vultr" in result.stderr
         assert "Traceback" not in result.stderr
 
     def test_missing_access_token(self, config_dir):

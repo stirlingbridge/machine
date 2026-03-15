@@ -12,9 +12,13 @@ on:
 
 jobs:
   e2e:
-    name: "End-to-End Tests"
+    name: "E2E Tests (${{ matrix.provider }})"
     runs-on: ubuntu-latest
     environment: e2e
+    strategy:
+      fail-fast: false
+      matrix:
+        provider: [digital-ocean, vultr]
     steps:
       - name: "Clone project repository"
         uses: actions/checkout@v4
@@ -26,8 +30,12 @@ jobs:
         run: uv sync
       - name: "Run E2E tests"
         env:
-          E2E_DO_TOKEN: ${{ secrets.E2E_DO_TOKEN }}
+          E2E_PROVIDER: ${{ matrix.provider }}
           E2E_SSH_KEY: ${{ vars.E2E_SSH_KEY }}
           E2E_DNS_ZONE: ${{ vars.E2E_DNS_ZONE }}
+          # DigitalOcean credentials
+          E2E_DO_TOKEN: ${{ secrets.E2E_DO_TOKEN }}
           E2E_PROJECT: ${{ vars.E2E_PROJECT }}
+          # Vultr credentials
+          E2E_VULTR_API_KEY: ${{ secrets.E2E_VULTR_API_KEY }}
         run: uv run pytest tests/test_e2e.py -v -m e2e

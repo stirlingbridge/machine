@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-CLI tool (`machine`) for creating and managing VMs on DigitalOcean. Built with Python and Click, packaged as a single-file executable via shiv.
+CLI tool (`machine`) for creating and managing VMs on DigitalOcean and Vultr. Built with Python and Click, packaged as a single-file executable via shiv.
 
 - **Org**: Stirlingbridge (`github.com/stirlingbridge/machine`)
 - **License**: AGPL-3.0-only
@@ -11,7 +11,7 @@ CLI tool (`machine`) for creating and managing VMs on DigitalOcean. Built with P
 ## Tech Stack
 
 - **CLI framework**: Click 8.1.7
-- **Cloud provider**: python-digitalocean 1.17.0
+- **Cloud providers**: python-digitalocean 1.17.0, vultr-python >=0.1.5
 - **Config**: ruamel.yaml (reads `~/.machine/config.yml`)
 - **Build tooling**: uv (dependency management), hatchling (build backend), shiv (zipapp packaging)
 
@@ -21,9 +21,14 @@ CLI tool (`machine`) for creating and managing VMs on DigitalOcean. Built with P
 machine/             # Main package
   main.py            # Click group entry point
   config.py          # Config file loading
+  provider.py        # Abstract CloudProvider base class
   di.py              # Dependency injection / globals
   factory.py         # VM creation factory
   cloud_config.py    # Cloud-init config generation
+  providers/         # Provider implementations
+    __init__.py      # Provider registry & factory
+    digitalocean.py  # DigitalOcean provider
+    vultr.py         # Vultr provider
   subcommands/       # Click subcommands (create, destroy, list, status, etc.)
 sh/                  # Shell scripts (build, lint, dev-setup)
 pyproject.toml       # Project metadata and dependencies

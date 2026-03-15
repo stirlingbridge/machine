@@ -18,6 +18,7 @@ dependencies = [
     "ruamel.yaml>=0.17.32",
     "requests==2.32.3",
     "expandvars==1.0.0",
+    "vultr-python>=0.1.5",
 ]
 
 [project.scripts]

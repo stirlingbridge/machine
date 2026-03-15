@@ -234,6 +234,7 @@ dependencies = [
     { name = "python-digitalocean" },
     { name = "requests" },
     { name = "ruamel-yaml" },
+    { name = "vultr-python" },
 ]
 
 [package.dev-dependencies]
@@ -251,6 +252,7 @@ requires-dist = [
     { name = "python-digitalocean", specifier = "==1.17.0" },
     { name = "requests", specifier = "==2.32.3" },
     { name = "ruamel-yaml", specifier = ">=0.17.32" },
+    { name = "vultr-python", specifier = ">=0.1.5" },
 ]
 
 [package.metadata.requires-dev]
@@ -568,4 +570,16 @@ resolution-markers = [
 sdist = { url = "https://files.pythonhosted.org/packages/c7/24/5f1b3bdffd70275f6661c76461e25f024d5a38a46f04aaca912426a2b1d3/urllib3-2.6.3.tar.gz", hash = "sha256:1b62b6884944a57dbe321509ab94fd4d3b307075e0c2eae991ac71ee15ad38ed", size = 435556, upload-time = "2026-01-07T16:24:43.925Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/39/08/aaaad47bc4e9dc8c725e68f9d04865dbcb2052843ff09c97b08904852d84/urllib3-2.6.3-py3-none-any.whl", hash = "sha256:bf272323e553dfb2e87d9bfd225ca7b0f467b919d7bbd355436d3fd37cb0acd4", size = 131584, upload-time = "2026-01-07T16:24:42.685Z" },
+]
+
+[[package]]
+name = "vultr-python"
+version = "0.2.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "requests" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/48/ce/6a1b73ff865f549facd64a1657b8910fe13aa1d3e2a6fbd55ef04c691a8b/vultr_python-0.2.0.tar.gz", hash = "sha256:8f955d46b017320a967fd002fece8a10ca441e8a52ed6124b9a55cb5dd46ee63", size = 10267, upload-time = "2025-12-01T00:08:41.248Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/77/27/f37609490a8e019e707d28fea2c1c3fc19f46b16275bc784f282a551f282/vultr_python-0.2.0-py3-none-any.whl", hash = "sha256:8f8dd1355b7dc93a5dfa352f912796f5ad363214d92c4c1d6382041363bce7cd", size = 7531, upload-time = "2025-12-01T00:08:39.918Z" },
 ]
