@@ -54,16 +54,14 @@ class VultrProvider(CloudProvider):
         except VultrException as e:
             fatal_error(f"Error creating instance: {e}")
 
-        instance = result.get("instance", result)
-        return _instance_to_vm(instance)
+        return _instance_to_vm(result)
 
     def get_vm(self, vm_id) -> VM:
         try:
             result = self._client.get_instance(vm_id)
         except VultrException as e:
             fatal_error(f"Error: machine with id {vm_id} not found: {e}")
-        instance = result.get("instance", result)
-        return _instance_to_vm(instance)
+        return _instance_to_vm(result)
 
     def destroy_vm(self, vm_id) -> bool:
         try:
@@ -78,8 +76,7 @@ class VultrProvider(CloudProvider):
             result = self._client.list_instances(params=params)
         except VultrException as e:
             fatal_error(f"Error listing instances: {e}")
-        instances = result.get("instances", [])
-        return [_instance_to_vm(i) for i in instances]
+        return [_instance_to_vm(i) for i in result]
 
     def get_ssh_key(self, name) -> SSHKey:
         key = self._get_vultr_ssh_key(name)
@@ -97,7 +94,6 @@ class VultrProvider(CloudProvider):
             result = self._client.list_keys()
         except VultrException as e:
             fatal_error(f"Error listing SSH keys: {e}")
-        keys = result.get("ssh_keys", [])
         return [
             SSHKey(
                 id=k["id"],
@@ -105,7 +101,7 @@ class VultrProvider(CloudProvider):
                 fingerprint=k.get("fingerprint", ""),
                 public_key=k.get("ssh_key", ""),
             )
-            for k in keys
+            for k in result
         ]
 
     def create_dns_record(self, zone, record_type, name, data, ttl, tag=None) -> str:
@@ -172,8 +168,7 @@ class VultrProvider(CloudProvider):
             result = self._client.list_keys()
         except VultrException as e:
             fatal_error(f"Error listing SSH keys: {e}")
-        keys = result.get("ssh_keys", [])
-        for key in keys:
+        for key in result:
             if key.get("name") == name:
                 return key
         return None
