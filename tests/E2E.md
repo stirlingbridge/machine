@@ -12,7 +12,7 @@ You need a DigitalOcean account with:
 
 - An API token with the required permissions (see below)
 - An SSH key registered in the account
-- A DNS zone managed by DigitalOcean (e.g. `example.com`). Note that Vultr does not have full DNS hosting functionality: it only supports hosting second-level domains, not subdomains (irrestpective of what their documentation states). So `example.com` works but `test.example.com` does not.
+- A DNS zone managed by DigitalOcean (e.g. `example.com`). Note that Vultr does not have full DNS hosting functionality: it only supports hosting second-level domains, not subdomains (irrespective of what their documentation states). So `example.com` works but `test.example.com` does not.
 - A project to assign droplets to
 
 #### API Token Permissions
