@@ -10,14 +10,14 @@ Provider selection:
 
 Required environment variables (all providers):
     E2E_SSH_KEY     - Name of an SSH key already registered with the provider
-    E2E_DNS_ZONE    - DNS zone managed by the provider (e.g. "test.example.com")
-
 Required environment variables (DigitalOcean):
     E2E_DO_TOKEN    - DigitalOcean API token
+    E2E_DO_DNS_ZONE - DNS zone hosted at DigitalOcean (e.g. "do.example.com")
     E2E_PROJECT     - DO project name to assign droplets to
 
 Required environment variables (Vultr):
-    E2E_VULTR_API_KEY - Vultr API key
+    E2E_VULTR_API_KEY  - Vultr API key
+    E2E_VULTR_DNS_ZONE - DNS zone hosted at Vultr (e.g. "example.com")
 
 Optional environment variables:
     E2E_REGION      - Region slug (default: provider-specific)
@@ -55,7 +55,18 @@ _PROVIDER_DEFAULTS = {
 _defaults = _PROVIDER_DEFAULTS.get(E2E_PROVIDER, _PROVIDER_DEFAULTS["digital-ocean"])
 
 E2E_SSH_KEY = os.environ.get("E2E_SSH_KEY")
-E2E_DNS_ZONE = os.environ.get("E2E_DNS_ZONE")
+
+# Per-provider DNS zones
+E2E_DO_DNS_ZONE = os.environ.get("E2E_DO_DNS_ZONE")
+E2E_VULTR_DNS_ZONE = os.environ.get("E2E_VULTR_DNS_ZONE")
+
+# Select the DNS zone for the active provider
+if E2E_PROVIDER == "digital-ocean":
+    E2E_DNS_ZONE = E2E_DO_DNS_ZONE
+elif E2E_PROVIDER == "vultr":
+    E2E_DNS_ZONE = E2E_VULTR_DNS_ZONE
+else:
+    E2E_DNS_ZONE = None
 E2E_REGION = os.environ.get("E2E_REGION", _defaults["region"])
 E2E_IMAGE = os.environ.get("E2E_IMAGE", _defaults["image"])
 E2E_SIZE = os.environ.get("E2E_SIZE", _defaults["size"])
@@ -75,17 +86,18 @@ pytestmark = pytest.mark.e2e
 _MISSING = []
 if not E2E_SSH_KEY:
     _MISSING.append("E2E_SSH_KEY")
-if not E2E_DNS_ZONE:
-    _MISSING.append("E2E_DNS_ZONE")
-
 if E2E_PROVIDER == "digital-ocean":
     if not E2E_DO_TOKEN:
         _MISSING.append("E2E_DO_TOKEN")
+    if not E2E_DO_DNS_ZONE:
+        _MISSING.append("E2E_DO_DNS_ZONE")
     if not E2E_PROJECT:
         _MISSING.append("E2E_PROJECT")
 elif E2E_PROVIDER == "vultr":
     if not E2E_VULTR_API_KEY:
         _MISSING.append("E2E_VULTR_API_KEY")
+    if not E2E_VULTR_DNS_ZONE:
+        _MISSING.append("E2E_VULTR_DNS_ZONE")
 else:
     _MISSING.append(f"E2E_PROVIDER (unknown provider: {E2E_PROVIDER})")
 
