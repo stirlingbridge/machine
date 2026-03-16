@@ -47,7 +47,7 @@ _PROVIDER_DEFAULTS = {
     },
     "vultr": {
         "region": "ewr",
-        "image": "2136",
+        "image": "2284",
         "size": "vc2-1c-1gb",
     },
 }
