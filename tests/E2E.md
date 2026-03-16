@@ -12,7 +12,7 @@ You need a DigitalOcean account with:
 
 - An API token with the required permissions (see below)
 - An SSH key registered in the account
-- A DNS zone managed by DigitalOcean (e.g. `test.example.com`)
+- A DNS zone managed by DigitalOcean (e.g. `example.com`). Note that Vultr does not have full DNS hosting functionality: it only supports hosting second-level domains, not subdomains (irrestpective of what their documentation states). So `example.com` works but `test.example.com` does not.
 - A project to assign droplets to
 
 #### API Token Permissions
@@ -35,7 +35,7 @@ You need a Vultr account with:
 
 - An API key (from https://my.vultr.com/settings/#settingsapi)
 - An SSH key registered in the account
-- A DNS zone managed by Vultr (e.g. `test.example.com`)
+- A DNS zone managed by Vultr (e.g. `example.com`)
 
 The Vultr API key has full access by default; there is no scope configuration.
 
@@ -95,7 +95,7 @@ uv run pytest tests/test_e2e.py -v -m e2e
 export E2E_PROVIDER="vultr"
 export E2E_VULTR_API_KEY="..."
 export E2E_SSH_KEY="my-ssh-key"
-export E2E_DNS_ZONE="test.example.com"
+export E2E_DNS_ZONE="example.com"
 
 make test-e2e
 # Or directly
