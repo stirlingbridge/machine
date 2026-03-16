@@ -32,10 +32,11 @@ jobs:
         env:
           E2E_PROVIDER: ${{ matrix.provider }}
           E2E_SSH_KEY: ${{ vars.E2E_SSH_KEY }}
-          E2E_DNS_ZONE: ${{ vars.E2E_DNS_ZONE }}
           # DigitalOcean credentials
           E2E_DO_TOKEN: ${{ secrets.E2E_DO_TOKEN }}
+          E2E_DO_DNS_ZONE: ${{ vars.E2E_DO_DNS_ZONE }}
           E2E_PROJECT: ${{ vars.E2E_PROJECT }}
           # Vultr credentials
           E2E_VULTR_API_KEY: ${{ secrets.E2E_VULTR_API_KEY }}
+          E2E_VULTR_DNS_ZONE: ${{ vars.E2E_VULTR_DNS_ZONE }}
         run: uv run pytest tests/test_e2e.py -v -m e2e
