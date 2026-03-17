@@ -1,4 +1,5 @@
 import base64
+import time
 
 from vultr import Vultr, VultrException
 
@@ -64,11 +65,23 @@ class VultrProvider(CloudProvider):
         return _instance_to_vm(result)
 
     def destroy_vm(self, vm_id) -> bool:
-        try:
-            self._client.delete_instance(vm_id)
-        except VultrException as e:
-            fatal_error(f"Error: machine with id {vm_id} not found: {e}")
-        return True
+        # Vultr returns HTTP 500 if the instance is still pending or locked
+        # (e.g. during provisioning). Retry deletion with backoff.
+        for attempt in range(24):
+            try:
+                self._client.delete_instance(vm_id)
+                return True
+            except VultrException as e:
+                error_msg = str(e)
+                if "500" in error_msg and ("not currently active" in error_msg or "currently locked" in error_msg):
+                    info("Waiting for instance to become ready before destroying...")
+                    time.sleep(5)
+                elif "404" in error_msg:
+                    return True  # already gone
+                else:
+                    fatal_error(f"Error: machine with id {vm_id} not found: {e}")
+        fatal_error(f"Error: timed out waiting to destroy instance {vm_id}")
+        return False
 
     def list_vms(self, tag=None) -> list:
         try:

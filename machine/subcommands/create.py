@@ -83,12 +83,14 @@ def command(context, name, tag, type, region, machine_size, image, wait_for_ip, 
             info(f"Assigned droplet to project: {config.project}")
 
     # If requested, or if we are going to set a DNS record get the VM's IPv4 address
-    ip_address = vm.ip_address
+    # Vultr returns "0.0.0.0" as main_ip while the instance is still pending,
+    # so treat that the same as no IP assigned yet.
+    ip_address = vm.ip_address if vm.ip_address != "0.0.0.0" else None
     if (wait_for_ip or update_dns) and not ip_address:
         while not ip_address:
             time.sleep(1)
             vm = provider.get_vm(vm.id)
-            ip_address = vm.ip_address
+            ip_address = vm.ip_address if vm.ip_address != "0.0.0.0" else None
             if d.opt.verbose:
                 output("Waiting for droplet IP address")
         if d.opt.quiet:
