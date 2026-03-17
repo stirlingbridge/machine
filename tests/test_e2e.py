@@ -235,7 +235,7 @@ def instance(config_file, session_id):
     yield info
 
     # ---- TEARDOWN: destroy with DNS cleanup --------------------------------
-    run_machine(
+    destroy_result = run_machine(
         "--verbose",
         "destroy",
         "--no-confirm",
@@ -244,6 +244,10 @@ def instance(config_file, session_id):
         config_file=config_file,
         session_id=session_id,
     )
+    if destroy_result.returncode != 0:
+        print(f"TEARDOWN WARNING: destroy exited {destroy_result.returncode}", flush=True)
+        print(f"  stdout: {destroy_result.stdout}", flush=True)
+        print(f"  stderr: {destroy_result.stderr}", flush=True)
 
 
 # ---------------------------------------------------------------------------
@@ -288,7 +292,9 @@ class TestInstanceLifecycle:
         instances = json.loads(result.stdout)
         matched = [i for i in instances if str(i["id"]) == instance["id"]]
         assert len(matched) == 1
-        assert matched[0]["ip"] is not None, "Instance has no IP address"
+        ip = matched[0]["ip"]
+        assert ip is not None, "Instance has no IP address"
+        assert ip != "0.0.0.0", "Instance IP is 0.0.0.0 (not yet assigned)"
 
     def test_dns_record_created(self, instance, config_file, session_id):
         """Verify that a DNS A record was created for the instance."""
