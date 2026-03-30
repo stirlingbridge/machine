@@ -1,10 +1,13 @@
 import click
+import json
 import time
+
 from machine.config import get_machine
 from machine.di import d
-from machine.log import fatal_error, info, debug, output
+from machine.log import fatal_error, info, debug, output as log_output
 from machine.types import MainCmdCtx, TAG_MACHINE_CREATED, TAG_MACHINE_TYPE_PREFIX
 from machine.cloud_config import get_user_data
+from machine.util import vm_to_json_obj
 
 from machine.types import TAG_MACHINE_SESSION_PREFIX
 
@@ -21,8 +24,9 @@ from machine.types import TAG_MACHINE_SESSION_PREFIX
 @click.option("--wait-for-ip/--no-wait-for-up", default=False)
 @click.option("--update-dns/--no-update-dns", default=True)
 @click.option("--initialize/--no-initialize", default=True)
+@click.option("--output", "-o", metavar="<FORMAT>", help="Output format")
 @click.pass_context
-def command(context, name, tag, type, region, machine_size, image, wait_for_ip, update_dns, initialize):
+def command(context, name, tag, type, region, machine_size, image, wait_for_ip, update_dns, initialize, output):
     command_context: MainCmdCtx = context.obj
     config = command_context.config
     provider = command_context.provider
@@ -71,10 +75,11 @@ def command(context, name, tag, type, region, machine_size, image, wait_for_ip, 
     )
 
     if vm.id:
-        if d.opt.quiet:
-            output(f"{vm.id}")
-        else:
-            output(f"New droplet created with id: {vm.id}")
+        if output != "json":
+            if d.opt.quiet:
+                log_output(f"{vm.id}")
+            else:
+                log_output(f"New droplet created with id: {vm.id}")
 
     # If requested, assign to a specified project
     if config.project:
@@ -92,7 +97,7 @@ def command(context, name, tag, type, region, machine_size, image, wait_for_ip, 
             vm = provider.get_vm(vm.id)
             ip_address = vm.ip_address if vm.ip_address != "0.0.0.0" else None
             if d.opt.verbose:
-                output("Waiting for droplet IP address")
+                log_output("Waiting for droplet IP address")
         if d.opt.quiet:
             info(f"{ip_address}")
         else:
@@ -117,3 +122,6 @@ def command(context, name, tag, type, region, machine_size, image, wait_for_ip, 
                 info(f"Created DNS record:{record}")
             if not d.opt.quiet:
                 info(f"DNS: {host}.{zone}")
+
+    if output == "json":
+        log_output(json.dumps(vm_to_json_obj(vm)))
