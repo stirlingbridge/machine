@@ -252,7 +252,24 @@ Options:
   --wait-for-ip / --no-wait-for-ip Wait for IP address assignment (default: off)
   --update-dns / --no-update-dns   Create DNS A record (default: on)
   --initialize / --no-initialize   Initialize with cloud-init (default: on)
+  -o, --output <FORMAT>            Output format (json)
   -h, --help                       Show this message and exit.
+```
+
+Output formats:
+- Default: human-readable status messages
+- `--output json`: JSON object with id, name, tags, region, ip, type
+
+JSON output example:
+```json
+{
+  "id": "12345678",
+  "name": "my-machine",
+  "tags": ["machine:created", "machine:type:example", "machine:session:abc12345"],
+  "region": "nyc3",
+  "ip": "203.0.113.10",
+  "type": "example"
+}
 ```
 
 When `--update-dns` is enabled (the default), the command waits for the instance's IP address and creates an A record in the configured `dns-zone` with a 5-minute TTL.
@@ -309,7 +326,21 @@ Options:
 Output formats:
 - Default: `name (id, region, type): ip_address`
 - `--quiet`: droplet IDs only
-- `--output json`: JSON array with id, name, tags, region, ip, type
+- `--output json`: JSON array of machine objects
+
+JSON output example:
+```json
+[
+  {
+    "id": "12345678",
+    "name": "my-machine",
+    "tags": ["machine:created", "machine:type:example", "machine:session:abc12345"],
+    "region": "nyc3",
+    "ip": "203.0.113.10",
+    "type": "example"
+  }
+]
+```
 
 #### status
 
@@ -332,6 +363,22 @@ Options:
   -q, --quiet                Only display machine IDs
   --all                      Include all machines from all sessions
   -h, --help                 Show this message and exit.
+```
+
+Output formats:
+- Default: human-readable status line
+- `--output json`: JSON array of status objects
+
+JSON output example:
+```json
+[
+  {
+    "name": "my-machine",
+    "id": "12345678",
+    "droplet-status": "active",
+    "cloud-init-status": "done"
+  }
+]
 ```
 
 In addition to the provider-reported instance status, this command queries each machine at `http://<ip>:4242/cgi-bin/<status-check>` (default: `cloud-init-status`) for custom status information. If the endpoint is unreachable, the status is reported as `UNKNOWN`.
@@ -360,11 +407,42 @@ If `ZONE` is omitted, uses the `dns-zone` from config. By default, only shows A 
 Output formats:
 - Default: `name\ttype\tdata`
 - `--quiet`: record names only
-- `--output json`: JSON array with id, droplet info, name, fqdn, zone, data, ttl, type
+- `--output json`: JSON array of record objects
+
+JSON output example:
+```json
+[
+  {
+    "id": "98765432",
+    "droplet": {
+      "id": "12345678",
+      "name": "my-machine",
+      "tags": ["machine:created"],
+      "region": "nyc3",
+      "ip": "203.0.113.10",
+      "type": "example"
+    },
+    "name": "my-machine",
+    "fqdn": "my-machine.example.com",
+    "zone": "example.com",
+    "data": "203.0.113.10",
+    "ttl": 300,
+    "type": "A"
+  }
+]
+```
 
 #### domains
 
-List all DNS domains in your provider account. Takes no options.
+List all DNS domains in your provider account.
+
+Options:
+- `-o, --output <FORMAT>`: Output format (`json`)
+
+JSON output example:
+```json
+["example.com", "example.org"]
+```
 
 #### ssh-keys
 
@@ -372,8 +450,24 @@ List SSH keys in your provider account. Output format: `id: name (fingerprint)`
 
 #### projects
 
-List project names (DigitalOcean only). Takes no options.
+List project names (DigitalOcean only).
+
+Options:
+- `-o, --output <FORMAT>`: Output format (`json`)
+
+JSON output example:
+```json
+["Infrastructure", "Web Apps"]
+```
 
 #### types
 
-List all machine types defined in the config file (from the `machines` section). Takes no options.
+List all machine types defined in the config file (from the `machines` section).
+
+Options:
+- `-o, --output <FORMAT>`: Output format (`json`)
+
+JSON output example:
+```json
+["example", "webserver"]
+```
