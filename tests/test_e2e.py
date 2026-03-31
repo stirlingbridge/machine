@@ -255,6 +255,31 @@ def instance(config_file, session_id):
 # ---------------------------------------------------------------------------
 
 
+class TestDnsZonePreFlight:
+    """Verify that create fails fast when the configured DNS zone does not exist."""
+
+    def test_create_fails_for_nonexistent_dns_zone(self, tmp_path, session_id):
+        bogus_zone = f"bogus-{uuid.uuid4().hex[:8]}.example"
+        cfg_path = tmp_path / "config.yml"
+        _write_config(cfg_path, **{"dns-zone": bogus_zone})
+
+        result = run_machine(
+            "create",
+            "--name",
+            _unique_name(),
+            "--type",
+            "e2e-basic",
+            "--no-initialize",
+            "--update-dns",
+            config_file=cfg_path,
+            session_id=session_id,
+        )
+        assert result.returncode != 0, "Expected create to fail for nonexistent DNS zone"
+        combined = result.stdout + result.stderr
+        assert bogus_zone in combined, f"Error should mention the bogus zone '{bogus_zone}'"
+        assert "not found" in combined.lower(), "Error should indicate zone was not found"
+
+
 class TestInstanceLifecycle:
     """Create one instance with all features and verify each aspect independently.
 
