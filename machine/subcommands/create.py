@@ -12,6 +12,13 @@ from machine.util import vm_to_json_obj
 from machine.types import TAG_MACHINE_SESSION_PREFIX
 
 
+def _validate_dns_zone(provider, dns_zone):
+    available_zones = provider.list_domains()
+    if dns_zone not in available_zones:
+        zones_str = ", ".join(available_zones) if available_zones else "none"
+        fatal_error(f"Error: DNS zone '{dns_zone}' not found in {provider.provider_name}. Available zones: {zones_str}")
+
+
 @click.command(help="Create a machine")
 @click.option("--name", "-n", required=True, metavar="<MACHINE-NAME>", help="Name for new machine")
 @click.option("--tag", "-t", metavar="<TAG-TEXT>", help="tag to be applied to new machine")
@@ -33,6 +40,9 @@ def command(context, name, tag, type, region, machine_size, image, wait_for_ip, 
 
     if update_dns and not config.dns_zone:
         fatal_error("Error: DNS update requested but no zone configured")
+
+    if update_dns and config.dns_zone:
+        _validate_dns_zone(provider, config.dns_zone)
 
     user_data = None
     if initialize:
