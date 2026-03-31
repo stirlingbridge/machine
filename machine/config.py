@@ -36,10 +36,14 @@ class _loaded_config:
     c: any = None
 
 
-def _load_config_data(config_file_name: str):
+def resolve_config_file_path(config_file_name: str) -> str:
     if not config_file_name:
         config_file_name = constants.default_config_file_path
-    config_path = Path(os.path.expanduser(config_file_name))
+    return str(Path(os.path.expanduser(config_file_name)))
+
+
+def _load_config_data(config_file_name: str):
+    config_path = Path(resolve_config_file_path(config_file_name))
     if not config_path.exists():
         fatal_error(f"Error: Config file: {config_path} not found")
     config = _expand_env_vars(yaml().load(open(config_path, "r")))

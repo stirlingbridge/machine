@@ -39,6 +39,122 @@ class TestVersionCommand:
         assert "Usage" in result.stdout
 
 
+class TestInfoCommand:
+    """Tests for the info diagnostic subcommand."""
+
+    @pytest.fixture()
+    def config_dir(self, tmp_path):
+        return tmp_path
+
+    def test_info_shows_config_file_path(self, config_dir):
+        config_file = config_dir / "config.yml"
+        write_config(
+            config_file,
+            """\
+            digital-ocean:
+              access-token: fake-token
+              ssh-key: test-key
+              machine-size: s-1vcpu-1gb
+              image: ubuntu-22-04-x64
+              region: nyc1
+              project: test-project
+            machines:
+              test-machine:
+                new-user-name: testuser
+            """,
+        )
+        result = run_machine("--config-file", str(config_file), "info")
+        assert result.returncode == 0
+        assert f"Config file: {config_file}" in result.stdout
+
+    def test_info_shows_config_file_contents(self, config_dir):
+        config_file = config_dir / "config.yml"
+        write_config(
+            config_file,
+            """\
+            digital-ocean:
+              access-token: fake-token
+              ssh-key: test-key
+              machine-size: s-1vcpu-1gb
+              image: ubuntu-22-04-x64
+              region: nyc1
+              project: test-project
+            machines:
+              test-machine:
+                new-user-name: testuser
+            """,
+        )
+        result = run_machine("--config-file", str(config_file), "info")
+        assert result.returncode == 0
+        assert "access-token: fake-token" in result.stdout
+        assert "ssh-key: test-key" in result.stdout
+
+    def test_info_shows_session_id(self, config_dir):
+        config_file = config_dir / "config.yml"
+        write_config(
+            config_file,
+            """\
+            digital-ocean:
+              access-token: fake-token
+              ssh-key: test-key
+              machine-size: s-1vcpu-1gb
+              image: ubuntu-22-04-x64
+              region: nyc1
+              project: test-project
+            machines:
+              test-machine:
+                new-user-name: testuser
+            """,
+        )
+        result = run_machine("--config-file", str(config_file), "info")
+        assert result.returncode == 0
+        assert "Session ID file:" in result.stdout
+        assert "Session ID:" in result.stdout
+
+    def test_info_shows_providers(self, config_dir):
+        config_file = config_dir / "config.yml"
+        write_config(
+            config_file,
+            """\
+            digital-ocean:
+              access-token: fake-token
+              ssh-key: test-key
+              machine-size: s-1vcpu-1gb
+              image: ubuntu-22-04-x64
+              region: nyc1
+              project: test-project
+            machines:
+              test-machine:
+                new-user-name: testuser
+            """,
+        )
+        result = run_machine("--config-file", str(config_file), "info")
+        assert result.returncode == 0
+        assert "digital-ocean" in result.stdout
+        assert "vultr" in result.stdout
+        assert "Active provider: digital-ocean" in result.stdout
+
+    def test_info_shows_vultr_as_active_provider(self, config_dir):
+        config_file = config_dir / "config.yml"
+        write_config(
+            config_file,
+            """\
+            vultr:
+              api-key: fake-key
+              ssh-key: test-key
+              machine-size: vc2-1c-1gb
+              image: ubuntu-22-04-x64
+              region: ewr
+            machines:
+              test-machine:
+                new-user-name: testuser
+            """,
+        )
+        result = run_machine("--config-file", str(config_file), "info")
+        assert result.returncode == 0
+        assert "Active provider: vultr" in result.stdout
+
+
 class TestEnvVarExpansionIntegration:
     """End-to-end tests that verify environment variable expansion works
     when the actual machine tool is invoked with a config file."""

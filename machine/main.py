@@ -7,7 +7,7 @@ from machine import constants
 from machine.di import d
 from machine.log import output
 from machine.providers import create_provider
-from machine.subcommands import create, destroy, list, projects, ssh_keys, domains, list_domain, types, status
+from machine.subcommands import create, destroy, info, list, projects, ssh_keys, domains, list_domain, types, status
 from machine.types import CliOptions, MainCmdCtx
 from machine.util import load_session_id
 
@@ -52,6 +52,7 @@ def version(context):
 main.add_command(create.command, "create")
 main.add_command(destroy.command, "destroy")
 main.add_command(domains.command, "domains")
+main.add_command(info.command, "info")
 main.add_command(list.command, "list")
 main.add_command(list_domain.command, "list-domain")
 main.add_command(projects.command, "projects")
