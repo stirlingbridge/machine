@@ -21,7 +21,7 @@ CLICK_CONTEXT_SETTINGS = dict(help_option_names=["-h", "--help"])
 @click.option("--dry-run", is_flag=True, default=False, help="Run but do not do anything")
 @click.option("--config-file", metavar="<PATH>", help=f"Specify the config file (default {constants.default_config_file_path})")
 @click.option(
-    "--session-id", metavar="<ID>", default=load_session_id(), help=f"Override the default session ID (default {load_session_id()})"
+    "--session-id", metavar="<ID>", default=load_session_id, help="Override the default session ID (default: from session-id.yml)"
 )
 @click.pass_context
 def main(context, debug, quiet, verbose, dry_run, config_file, session_id):
