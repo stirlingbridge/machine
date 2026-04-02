@@ -59,7 +59,10 @@ class DigitalOceanProvider(CloudProvider):
             user_data=user_data,
             backups=False,
         )
-        droplet.create()
+        try:
+            droplet.create()
+        except digitalocean.DataReadError as e:
+            fatal_error(f"DigitalOcean API error creating VM: {e}")
         return _droplet_to_vm(droplet)
 
     def get_vm(self, vm_id) -> VM:
