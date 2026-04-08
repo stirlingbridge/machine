@@ -25,7 +25,7 @@ def is_same_session(command_context: MainCmdCtx, vm):
 
 def load_session_id():
     if not os.path.exists(default_config_dir_path):
-        os.mkdir(default_config_dir_path)
+        os.makedirs(default_config_dir_path, exist_ok=True)
 
     if not os.path.exists(default_session_id_file_path):
         with open(default_session_id_file_path, "w") as f:
