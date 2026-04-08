@@ -22,6 +22,8 @@ jobs:
         run: |
           release_tag=$(./sh/make-release-tag.sh)
           echo "release-tag=v${release_tag}" >> $GITHUB_OUTPUT
+      - name: "Run lint checks"
+        run: ./sh/lint.sh
       - name: "Build shiv package"
         run: |
           ./sh/build-package.sh
