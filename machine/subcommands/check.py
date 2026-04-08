@@ -28,7 +28,7 @@ def command(context):
     try:
         provider.list_ssh_keys()
         report("API authentication", True)
-    except Exception as e:
+    except (Exception, SystemExit) as e:
         report("API authentication", False, str(e))
         # If auth fails, remaining checks will also fail
         output("\nAPI authentication failed, skipping remaining checks.")
