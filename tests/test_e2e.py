@@ -255,6 +255,66 @@ def instance(config_file, session_id):
 # ---------------------------------------------------------------------------
 
 
+class TestCheck:
+    """Verify the ``check`` subcommand validates config against the provider API."""
+
+    def test_check_passes_with_valid_config(self, config_file, session_id):
+        """Verify that check succeeds when all config values are valid."""
+        result = run_machine("check", config_file=config_file, session_id=session_id)
+        combined = result.stdout + result.stderr
+        assert result.returncode == 0, f"check failed: {combined}"
+        assert "All checks passed" in combined
+
+    def test_check_reports_api_auth_pass(self, config_file, session_id):
+        """Verify that check reports API authentication as passing."""
+        result = run_machine("check", config_file=config_file, session_id=session_id)
+        combined = result.stdout + result.stderr
+        assert "PASS: API authentication" in combined
+
+    def test_check_reports_ssh_key_pass(self, config_file, session_id):
+        """Verify that check reports the configured SSH key as found."""
+        result = run_machine("check", config_file=config_file, session_id=session_id)
+        combined = result.stdout + result.stderr
+        assert "PASS: SSH key" in combined
+
+    def test_check_reports_dns_zone_pass(self, config_file, session_id):
+        """Verify that check reports the configured DNS zone as found."""
+        result = run_machine("check", config_file=config_file, session_id=session_id)
+        combined = result.stdout + result.stderr
+        assert "PASS: DNS zone" in combined
+
+    def test_check_fails_with_bad_token(self, tmp_path, session_id):
+        """Verify that check fails when the API token is invalid."""
+        cfg_path = tmp_path / "config.yml"
+        if E2E_PROVIDER == "digital-ocean":
+            _write_config(cfg_path, **{"access-token": "invalid-token-for-e2e-test"})
+        elif E2E_PROVIDER == "vultr":
+            _write_config(cfg_path, **{"api-key": "invalid-token-for-e2e-test"})
+        result = run_machine("check", config_file=cfg_path, session_id=session_id)
+        combined = result.stdout + result.stderr
+        assert result.returncode != 0, f"check should have failed with bad token: {combined}"
+        assert "FAIL: API authentication" in combined
+
+    def test_check_fails_with_bad_ssh_key(self, tmp_path, session_id):
+        """Verify that check fails when the SSH key does not exist at the provider."""
+        cfg_path = tmp_path / "config.yml"
+        _write_config(cfg_path, **{"ssh-key": f"nonexistent-key-{uuid.uuid4().hex[:8]}"})
+        result = run_machine("check", config_file=cfg_path, session_id=session_id)
+        combined = result.stdout + result.stderr
+        assert result.returncode != 0, f"check should have failed with bad SSH key: {combined}"
+        assert "FAIL: SSH key" in combined
+
+    def test_check_fails_with_bad_dns_zone(self, tmp_path, session_id):
+        """Verify that check fails when the DNS zone does not exist at the provider."""
+        cfg_path = tmp_path / "config.yml"
+        bogus_zone = f"bogus-{uuid.uuid4().hex[:8]}.example"
+        _write_config(cfg_path, **{"dns-zone": bogus_zone})
+        result = run_machine("check", config_file=cfg_path, session_id=session_id)
+        combined = result.stdout + result.stderr
+        assert result.returncode != 0, f"check should have failed with bad DNS zone: {combined}"
+        assert "FAIL: DNS zone" in combined
+
+
 class TestDnsZonePreFlight:
     """Verify that create fails fast when the configured DNS zone does not exist."""
 
