@@ -195,9 +195,20 @@ Each entry under `machines:` defines a machine type that can be referenced with 
 | `script-url` | No | URL to download an initialization script from |
 | `script-dir` | No | Directory to store the initialization script |
 | `script-path` | No | Full path for the initialization script |
-| `script-args` | No | Arguments passed to the initialization script (supports variable expansion) |
+| `script-args` | No | Arguments passed to the initialization script (supports variable expansion). Either a single string, or a list where each item is passed to the script as exactly one shell argument |
 
-If `script-url`, `script-dir`, and `script-path` are all provided, the script is downloaded and executed as the new user during cloud-init. The following variables are available for expansion in `script-args`:
+If `script-url`, `script-dir`, and `script-path` are all provided, the script is downloaded and executed as the new user during cloud-init.
+
+When `script-args` is a list, each item reaches the script as one argument regardless of any spaces it contains. This composes well with runner scripts such as [combine.sh](https://github.com/stirlingbridge/machine-provisioning), which accepts one `"<script> [args...]"` entry per script to run:
+
+```yaml
+        script-args:
+          - packages.sh build-essential
+          - podman.sh
+          - k3s-node.sh -y --letsencrypt-email user@example.com
+```
+
+The following variables are available for expansion in `script-args` (both forms):
 
 - `$MACHINE_SCRIPT_URL` — URL of the initialization script
 - `$MACHINE_SCRIPT_DIR` — directory path for the script
