@@ -38,4 +38,4 @@ class MachineConfig:
     script_url: str
     script_dir: str
     script_path: str
-    script_args: str
+    script_args: "str | list"

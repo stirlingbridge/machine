@@ -1,3 +1,5 @@
+import shlex
+
 from expandvars import expand
 
 from machine.log import fatal_error
@@ -5,13 +7,28 @@ from machine.provider import CloudProvider
 from machine.types import MachineConfig
 
 
+def _render_script_args(script_args, cloud_env) -> str:
+    """Render config script-args for interpolation into the runcmd shell string.
+
+    A string value is passed through verbatim (legacy behavior). A list value
+    is rendered so that each element reaches the script as exactly one shell
+    argument, however many spaces or quotes it contains. In both cases the
+    result is escaped for the YAML double-quoted scalar it is embedded in.
+    """
+    if not script_args:
+        return ""
+    if isinstance(script_args, list):
+        expanded = [expand(str(item), environ=cloud_env) for item in script_args]
+        quoted = " ".join(shlex.quote(item) for item in expanded)
+        return quoted.replace("\\", "\\\\").replace('"', '\\"')
+    escaped = str(script_args).replace('"', '\\"')
+    # Expand here because otherwise escaping the vars properly for nested scripts is a guessing game
+    return expand(escaped, environ=cloud_env)
+
+
 def get_user_data(provider: CloudProvider, ssh_key_names: list, fqdn: str, machine_config: MachineConfig):
     if not fqdn:
         fqdn = ""
-
-    script_args = machine_config.script_args
-    if not script_args:
-        script_args = ""
 
     public_keys = []
     for ssh_key_name in ssh_key_names:
@@ -19,7 +36,6 @@ def get_user_data(provider: CloudProvider, ssh_key_names: list, fqdn: str, machi
         if not ssh_key:
             fatal_error(f"Error: SSH key '{ssh_key_name}' not found in {provider.provider_name}")
         public_keys.append(ssh_key.public_key)
-    escaped_args = script_args.replace('"', '\\"')
 
     cloud_env = {
         "MACHINE_SCRIPT_URL": machine_config.script_url,
@@ -27,8 +43,7 @@ def get_user_data(provider: CloudProvider, ssh_key_names: list, fqdn: str, machi
         "MACHINE_FQDN": fqdn,
     }
 
-    # Exand here because otherwise escaping the vars properly for nested scripts is a guessing game
-    escaped_args = expand(escaped_args, environ=cloud_env)
+    escaped_args = _render_script_args(machine_config.script_args, cloud_env)
     authorized_keys = "\n".join(f"      - {key}" for key in public_keys)
     cloud_config = f"""#cloud-config
 users:

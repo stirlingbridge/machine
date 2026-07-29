@@ -118,12 +118,17 @@ def get_machine(name: str) -> MachineConfig:
     if name not in config_machines:
         fatal_error(f"Machine type '{name}' not found in config file. Available types: {', '.join(config_machines.keys())}")
     target_config = config_machines[name]
+    script_args = target_config.get("script-args")
+    if script_args is not None and not isinstance(script_args, (str, list)):
+        fatal_error(f"Config key 'script-args' in 'machines.{name}' must be a string or a list of strings")
+    if isinstance(script_args, list) and not all(isinstance(item, (str, int, float, bool)) for item in script_args):
+        fatal_error(f"Config key 'script-args' in 'machines.{name}' must be a list of scalar values")
     return MachineConfig(
         _require_key(target_config, "new-user-name", f"machines.{name}"),
         target_config.get("script-url"),
         target_config.get("script-dir"),
         target_config.get("script-path"),
-        target_config.get("script-args"),
+        script_args,
     )
 
 
