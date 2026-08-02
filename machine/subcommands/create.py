@@ -33,8 +33,8 @@ def _verify_ssh_keys(provider, ssh_key_names):
 @click.option(
     "--machine-size", "-s", metavar="<MACHINE-SLUG>", help="create a machine of this size (overrides default from config)"
 )
-@click.option("--image", "-s", metavar="<IMAGE-NAME>", help="create a machine from this image (overrides default from config)")
-@click.option("--wait-for-ip/--no-wait-for-up", default=False)
+@click.option("--image", "-i", metavar="<IMAGE-NAME>", help="create a machine from this image (overrides default from config)")
+@click.option("--wait-for-ip/--no-wait-for-ip", default=False)
 @click.option("--update-dns/--no-update-dns", default=True)
 @click.option("--initialize/--no-initialize", default=True)
 @click.option("--output", "-o", metavar="<FORMAT>", help="Output format")
