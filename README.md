@@ -334,7 +334,7 @@ Options:
   -r, --region <REGION-CODE>       Region (overrides config default)
   -s, --machine-size <MACHINE-SLUG>
                                     Machine size (overrides config default)
-  -s, --image <IMAGE-NAME>         Image (overrides config default)
+  -i, --image <IMAGE-NAME>         Image (overrides config default)
   --wait-for-ip / --no-wait-for-ip Wait for IP address assignment (default: off)
   --update-dns / --no-update-dns   Create DNS A record (default: on)
   --initialize / --no-initialize   Initialize with cloud-init (default: on)
