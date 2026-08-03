@@ -3,6 +3,10 @@ CLI utility to create and manage VMs
 
 Supports [DigitalOcean](https://www.digitalocean.com/), [Vultr](https://www.vultr.com/), and [Google Cloud Platform](https://cloud.google.com/) hosting platforms.
 
+![Creating a DigitalOcean droplet with DNS and cloud-init provisioning, checking its status, logging into it, then destroying it — all with machine](./docs/images/demo.gif)
+
+The animation above is a real, unedited run against a live DigitalOcean account; it is recorded by [demo/record-demo.sh](./demo/record-demo.sh).
+
 ## Prerequisites
 
 This project uses [uv](https://docs.astral.sh/uv/) for dependency management and builds.
