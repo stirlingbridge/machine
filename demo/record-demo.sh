@@ -13,6 +13,8 @@
 #   * The config file references the API token, ssh key name, DNS zone and
 #     project by ${...} environment variable, so no secret appears on screen.
 #   * A best-effort sweep for a leftover demo1 droplet from an aborted run.
+#   * A `machine` shim on PATH that runs this working tree, so the recording
+#     always shows the current source rather than an installed release.
 #
 # Costs money: it creates and destroys a real droplet each time it runs.
 #
@@ -23,7 +25,7 @@
 #   MACHINE_DNS_ZONE    DNS zone hosted at DigitalOcean
 #   MACHINE_DO_PROJECT  DO project to assign the droplet to
 #
-# Requires: vhs, ttyd, ffmpeg, dig, and the `machine` CLI on PATH.
+# Requires: vhs, ttyd, ffmpeg, dig and uv on PATH.
 
 set -euo pipefail
 
@@ -37,14 +39,14 @@ DEMO_NAME="demo1"
 EXPECTED_ZONE="machine.servesthe.world"
 
 missing=()
-for tool in vhs ttyd ffmpeg dig machine; do
+for tool in vhs ttyd ffmpeg dig uv; do
     command -v "$tool" >/dev/null || missing+=("$tool")
 done
 if [ ${#missing[@]} -gt 0 ]; then
     echo "error: not on PATH: ${missing[*]}" >&2
     echo "  ffmpeg, ttyd, dig: sudo apt-get install -y ffmpeg ttyd dnsutils" >&2
     echo "  vhs:               https://github.com/charmbracelet/vhs/releases" >&2
-    echo "  machine:           uv tool install git+https://github.com/stirlingbridge/machine.git" >&2
+    echo "  uv:                curl -LsSf https://astral.sh/uv/install.sh | sh" >&2
     exit 1
 fi
 
@@ -72,8 +74,24 @@ fi
 
 echo "==> Building the scratch home"
 rm -rf "$SCRATCH"
-mkdir -p "$DEMO_HOME/.config/machine" "$DEMO_HOME/.ssh"
+mkdir -p "$DEMO_HOME/.config/machine" "$DEMO_HOME/.ssh" "$SCRATCH/bin"
 install -m 600 "$PRIVATE_KEY" "$DEMO_HOME/.ssh/$MACHINE_SSH_KEY"
+
+# The recorded commands must exercise this working tree, not whatever version of
+# `machine` happens to be installed on the recorder's PATH — otherwise a gif
+# recorded after a CLI change would silently show the old behaviour (or fail on
+# a flag that is not released yet). A shim named `machine` runs the working tree
+# and shadows any installed copy, so the recording stays honest without needing
+# `uv tool install` to be re-run first.
+cat > "$SCRATCH/bin/machine" <<EOF
+#!/usr/bin/env bash
+exec uv run --quiet --project "$REPO_ROOT" machine "\$@"
+EOF
+chmod +x "$SCRATCH/bin/machine"
+export PATH="$SCRATCH/bin:$PATH"
+
+echo "==> Syncing the working tree"
+uv sync --quiet
 
 cat > "$DEMO_HOME/.config/machine/config.yml" <<'EOF'
 digital-ocean:

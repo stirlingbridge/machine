@@ -340,6 +340,8 @@ Options:
                                     Machine size (overrides config default)
   -i, --image <IMAGE-NAME>         Image (overrides config default)
   --wait-for-ip / --no-wait-for-ip Wait for IP address assignment (default: off)
+  --progress / --no-progress       Animate a progress indicator while waiting
+                                    for the IP address (default: off)
   --update-dns / --no-update-dns   Create DNS A record (default: on)
   --initialize / --no-initialize   Initialize with cloud-init (default: on)
   -o, --output <FORMAT>            Output format (json)
@@ -363,6 +365,8 @@ JSON output example:
 ```
 
 When `--update-dns` is enabled (the default), the command waits for the instance's IP address and creates an A record in the configured `dns-zone` with a 5-minute TTL.
+
+That wait takes tens of seconds and is silent by default. `--progress` animates a spinner with an elapsed-second count on stderr for the duration, so an interactive run does not look like it has hung. It is ignored when stderr is not a terminal, and `--verbose` (which reports the same wait in words) takes precedence over it, so scripted and piped output is unaffected either way.
 
 When `--initialize` is enabled (the default), a cloud-config user-data payload is generated that creates a non-root user with sudo access, installs the configured SSH key(s), and optionally downloads and runs an initialization script.
 

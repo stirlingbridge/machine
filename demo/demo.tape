@@ -9,7 +9,7 @@
 # and ssh key) that this tape assumes, and cleans up afterwards. Nothing here is
 # staged: every command talks to the real DigitalOcean API.
 #
-# Requires: vhs, ttyd, ffmpeg, dig, and the `machine` CLI on PATH.
+# Requires: vhs, ttyd, ffmpeg, dig and uv on PATH.
 
 Output docs/images/demo.gif
 
@@ -60,7 +60,12 @@ Enter
 # ~40s of real work: create the droplet, wait for its IP, add the DNS A record,
 # and hand cloud-init a user-data payload that creates the `demo` user, installs
 # the ssh key and runs the provisioning scripts from the machine type.
-Type "machine create --name demo1 --type demo --wait-for-ip"
+#
+# --progress animates the wait for the IP address, which is most of those 40s
+# and is otherwise silent. It is off by default (and ignored when stderr is not
+# a terminal), so it is opted into here rather than being the tool's normal
+# behaviour.
+Type "machine create --name demo1 --type demo --wait-for-ip --progress"
 Enter
 Wait+Line@300s /^▸$/
 Sleep 2s

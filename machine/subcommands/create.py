@@ -4,7 +4,7 @@ import time
 
 from machine.config import get_machine
 from machine.di import d
-from machine.log import fatal_error, info, debug, output as log_output
+from machine.log import Spinner, fatal_error, info, debug, output as log_output
 from machine.types import MainCmdCtx, TAG_MACHINE_CREATED, TAG_MACHINE_TYPE_PREFIX
 from machine.cloud_config import get_user_data
 from machine.util import vm_to_json_obj
@@ -35,11 +35,16 @@ def _verify_ssh_keys(provider, ssh_key_names):
 )
 @click.option("--image", "-i", metavar="<IMAGE-NAME>", help="create a machine from this image (overrides default from config)")
 @click.option("--wait-for-ip/--no-wait-for-ip", default=False)
+@click.option(
+    "--progress/--no-progress",
+    default=False,
+    help="Animate a progress indicator while waiting for the machine's IP address",
+)
 @click.option("--update-dns/--no-update-dns", default=True)
 @click.option("--initialize/--no-initialize", default=True)
 @click.option("--output", "-o", metavar="<FORMAT>", help="Output format")
 @click.pass_context
-def command(context, name, tag, type, region, machine_size, image, wait_for_ip, update_dns, initialize, output):
+def command(context, name, tag, type, region, machine_size, image, wait_for_ip, progress, update_dns, initialize, output):
     command_context: MainCmdCtx = context.obj
     config = command_context.config
     provider = command_context.provider
@@ -106,12 +111,16 @@ def command(context, name, tag, type, region, machine_size, image, wait_for_ip, 
     # so treat that the same as no IP assigned yet.
     ip_address = vm.ip_address if vm.ip_address != "0.0.0.0" else None
     if (wait_for_ip or update_dns) and not ip_address:
-        while not ip_address:
-            time.sleep(1)
-            vm = provider.get_vm(vm.id)
-            ip_address = vm.ip_address if vm.ip_address != "0.0.0.0" else None
-            if d.opt.verbose:
-                log_output("Waiting for machine IP address")
+        # The spinner and the --verbose progress lines would overwrite each
+        # other, so --verbose (which says what is happening in words) wins.
+        show_spinner = progress and not d.opt.verbose and not d.opt.quiet
+        with Spinner("Waiting for machine IP address", enabled=show_spinner):
+            while not ip_address:
+                time.sleep(1)
+                vm = provider.get_vm(vm.id)
+                ip_address = vm.ip_address if vm.ip_address != "0.0.0.0" else None
+                if d.opt.verbose:
+                    log_output("Waiting for machine IP address")
         if d.opt.quiet:
             info(f"{ip_address}")
         else:
