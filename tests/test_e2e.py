@@ -57,10 +57,14 @@ _PROVIDER_DEFAULTS = {
         "image": "2284",
         "size": "vc2-1c-1gb",
     },
+    # us-east4-c / e2-small rather than the obvious us-central1-a / e2-micro:
+    # the always-free tier covers one e2-micro in us-central1, us-east1 and
+    # us-west1, so that combination is heavily oversubscribed and creates were
+    # failing with ZONE_RESOURCE_POOL_EXHAUSTED (issue #109).
     "gcp": {
-        "region": "us-central1-a",
+        "region": "us-east4-c",
         "image": "projects/ubuntu-os-cloud/global/images/family/ubuntu-2404-lts-amd64",
-        "size": "e2-micro",
+        "size": "e2-small",
     },
 }
 
@@ -284,6 +288,33 @@ def leak_check(config_file, session_id):
     )
 
 
+# Markers seen in provider output when the provider itself is out of capacity for
+# the requested size in the requested region, as opposed to anything being wrong
+# with machine. Only the GCP wording is listed because that is the only one we
+# have actually observed (issue #109); add others as they turn up.
+_CAPACITY_EXHAUSTED_MARKERS = (
+    "ZONE_RESOURCE_POOL_EXHAUSTED",
+    "does not have enough resources available",
+)
+
+
+def _fail_if_capacity_exhausted(output):
+    """Fail with an explanatory message if create failed because the provider is full.
+
+    This is an infrastructure condition, not a test failure: the provider has no
+    capacity for this size in this region right now. Called before the generic
+    create assertion so the cause is obvious in the CI log.
+    """
+    for marker in _CAPACITY_EXHAUSTED_MARKERS:
+        if marker.lower() in output.lower():
+            pytest.fail(
+                f"Provider is out of capacity for size '{E2E_SIZE}' in region '{E2E_REGION}' "
+                f"({E2E_PROVIDER}). This is a provider-side stockout, not a bug in machine -- "
+                f"retry later, or set E2E_REGION / E2E_SIZE to a less contended zone or machine "
+                f"type. Provider output:\n{output}"
+            )
+
+
 @pytest.fixture(scope="class")
 def instance(config_file, session_id):
     """Create a single instance with all features and destroy it after all tests.
@@ -308,6 +339,8 @@ def instance(config_file, session_id):
         config_file=config_file,
         session_id=session_id,
     )
+    if result.returncode != 0:
+        _fail_if_capacity_exhausted(result.stdout + result.stderr)
     assert result.returncode == 0, f"create failed: {result.stderr}"
     create_out = result.stdout + result.stderr
     instance_id = _extract_instance_id(create_out)
