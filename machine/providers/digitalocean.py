@@ -100,10 +100,7 @@ class DigitalOceanProvider(CloudProvider):
 
     def list_ssh_keys(self) -> list:
         keys = self._manager.get_all_sshkeys()
-        return [
-            SSHKey(id=str(k.id), name=k.name, fingerprint=k.fingerprint, public_key=k.public_key)
-            for k in keys
-        ]
+        return [SSHKey(id=str(k.id), name=k.name, fingerprint=k.fingerprint, public_key=k.public_key) for k in keys]
 
     def create_dns_record(self, zone, record_type, name, data, ttl, tag=None) -> str:
         domain = digitalocean.Domain(token=self.token, name=zone)
@@ -126,10 +123,7 @@ class DigitalOceanProvider(CloudProvider):
     def get_dns_records(self, zone) -> list:
         domain = digitalocean.Domain(token=self.token, name=zone)
         records = domain.get_records()
-        return [
-            DNSRecord(id=str(r.id), name=r.name, type=r.type, data=r.data, ttl=r.ttl)
-            for r in records
-        ]
+        return [DNSRecord(id=str(r.id), name=r.name, type=r.type, data=r.data, ttl=r.ttl) for r in records]
 
     def list_domains(self) -> list:
         domains = self._manager.get_all_domains()

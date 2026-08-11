@@ -83,13 +83,9 @@ def get(config_file_name: str) -> Config:
     if not provider_name:
         found = [p for p in KNOWN_PROVIDERS if p in config]
         if len(found) == 0:
-            fatal_error(
-                "No provider section found in config file. Expected one of: " + ", ".join(KNOWN_PROVIDERS)
-            )
+            fatal_error("No provider section found in config file. Expected one of: " + ", ".join(KNOWN_PROVIDERS))
         if len(found) > 1:
-            fatal_error(
-                "Multiple provider sections found in config file. Please add a 'provider:' key to select one."
-            )
+            fatal_error("Multiple provider sections found in config file. Please add a 'provider:' key to select one.")
         provider_name = found[0]
 
     if provider_name not in config:

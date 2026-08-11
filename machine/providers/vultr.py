@@ -7,12 +7,16 @@ from machine.log import fatal_error, info
 from machine.provider import CloudProvider, VM, SSHKey, DNSRecord
 
 
+# fmt: off
+# Kept as a grid rather than one region per line, which is how it reads on
+# Vultr's own region list and keeps the whole set visible at a glance.
 VALID_REGIONS = [
     "ewr", "ord", "dfw", "sea", "lax", "atl", "ams", "lhr", "fra",
     "sjc", "syd", "nrt", "cdg", "icn", "mia", "sgp", "sto",
     "mex", "mad", "sao", "del", "hnl", "yto", "blr", "jnb",
     "bom", "tlv",
 ]
+# fmt: on
 
 # Overall budget for destroy_vm, and for confirming a single accepted delete.
 # The overall budget stays well inside the callers' expectations of a command
@@ -158,7 +162,10 @@ class VultrProvider(CloudProvider):
         try:
             result = self._client.post(
                 f"/domains/{zone}/records",
-                type=record_type, name=name, data=data, ttl=ttl,
+                type=record_type,
+                name=name,
+                data=data,
+                ttl=ttl,
             )
         except VultrException:
             info(f"Warning: DNS zone '{zone}' not found in Vultr, DNS record not set")
