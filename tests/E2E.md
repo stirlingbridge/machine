@@ -100,7 +100,9 @@ Defaults: region `ewr`, image `2136` (Ubuntu 24.04), size `vc2-1c-1gb`
 | `E2E_GCP_DNS_ZONE` | Yes | DNS zone hosted in Cloud DNS (e.g. `gcp.example.com`) |
 | `E2E_GCP_CREDENTIALS_FILE` | No | Path to a service account JSON key file. If unset, [Application Default Credentials](https://cloud.google.com/docs/authentication/application-default-credentials) are used |
 
-Defaults: region (zone) `us-central1-a`, image `projects/ubuntu-os-cloud/global/images/family/ubuntu-2404-lts-amd64`, size `e2-micro`
+Defaults: region (zone) `us-east4-c`, image `projects/ubuntu-os-cloud/global/images/family/ubuntu-2404-lts-amd64`, size `e2-small`
+
+The zone and size are deliberately not `us-central1-a` / `e2-micro`: the GCP always-free tier covers one `e2-micro` in `us-central1`, `us-east1` and `us-west1`, making that combination heavily oversubscribed and prone to `ZONE_RESOURCE_POOL_EXHAUSTED` on create.
 
 ## Running
 
