@@ -14,6 +14,13 @@ VALID_REGIONS = [
     "bom", "tlv",
 ]
 
+# Overall budget for destroy_vm, and for confirming a single accepted delete.
+# The overall budget stays well inside the callers' expectations of a command
+# that finishes in a few minutes.
+DESTROY_TIMEOUT = 240
+DESTROY_CONFIRM_TIMEOUT = 60
+DESTROY_POLL_INTERVAL = 5
+
 
 def _instance_to_vm(instance) -> VM:
     return VM(
@@ -68,23 +75,50 @@ class VultrProvider(CloudProvider):
         return _instance_to_vm(result)
 
     def destroy_vm(self, vm_id) -> bool:
-        # Vultr returns HTTP 500 if the instance is still pending or locked
-        # (e.g. during provisioning). Retry deletion with backoff.
-        for attempt in range(24):
+        # Vultr will not delete an instance that is still provisioning. It has
+        # signalled that in several ways over time (HTTP 500 "not currently
+        # active", HTTP 400 "currently locked", and — worst of all — by
+        # accepting the DELETE and then not acting on it), so retry on anything
+        # that is not a definitive answer, and confirm the instance really went
+        # away before reporting success.
+        deadline = time.monotonic() + DESTROY_TIMEOUT
+        last_error = None
+        while time.monotonic() < deadline:
             try:
                 self._client.delete_instance(vm_id)
-                return True
             except VultrException as e:
-                error_msg = str(e)
-                if "500" in error_msg and ("not currently active" in error_msg or "currently locked" in error_msg):
-                    info("Waiting for instance to become ready before destroying...")
-                    time.sleep(5)
-                elif "404" in error_msg:
+                if e.status == 404:
                     return True  # already gone
-                else:
-                    fatal_error(f"Error: machine with id {vm_id} not found: {e}")
-        fatal_error(f"Error: timed out waiting to destroy instance {vm_id}")
+                if e.status in (401, 403):
+                    fatal_error(f"Error destroying machine with id {vm_id}: {e}")
+                last_error = e
+                info("Waiting for instance to become ready before destroying...")
+                time.sleep(DESTROY_POLL_INTERVAL)
+                continue
+
+            if self._instance_is_gone(vm_id):
+                return True
+            info("Instance still present after delete was accepted, retrying...")
+            time.sleep(DESTROY_POLL_INTERVAL)
+
+        if last_error:
+            fatal_error(f"Error: timed out destroying instance {vm_id}: {last_error}")
+        fatal_error(f"Error: timed out waiting for instance {vm_id} to be destroyed")
         return False
+
+    def _instance_is_gone(self, vm_id) -> bool:
+        """Poll the instance until the API reports it no longer exists."""
+        deadline = time.monotonic() + DESTROY_CONFIRM_TIMEOUT
+        while True:
+            try:
+                self._client.get_instance(vm_id)
+            except VultrException as e:
+                if e.status == 404:
+                    return True
+                raise
+            if time.monotonic() >= deadline:
+                return False
+            time.sleep(DESTROY_POLL_INTERVAL)
 
     def list_vms(self, tag=None) -> list:
         try:

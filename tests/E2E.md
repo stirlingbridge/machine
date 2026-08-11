@@ -173,6 +173,8 @@ If credentials for a provider are not configured, that provider's test run will 
 
 Each test cleans up after itself. All test instances use unique names prefixed with `e2etest-` so they are easy to identify.
 
+A module-scoped `leak_check` fixture runs last and lists everything still tagged with the run's session id. Anything it finds is destroyed and then reported as a test failure — a leaked VM is a bug, not a warning, because a silent one accumulates until the provider's instance limit is reached (issue #102).
+
 ## Cost
 
 Tests use the smallest available instance size and destroy VMs immediately after verification, so cost is minimal.
