@@ -233,6 +233,57 @@ def session_id():
     return uuid.uuid4().hex[:8]
 
 
+def _list_session_instances(config_file, session_id):
+    """Return every instance this test session created that still exists.
+
+    ``list`` without ``--all`` is already filtered to the machines tagged with
+    this session id, so this sees exactly what the tests are responsible for.
+    """
+    result = run_machine("list", "--output", "json", config_file=config_file, session_id=session_id)
+    if result.returncode != 0:
+        return None  # cannot tell; do not claim a leak we did not observe
+    try:
+        return json.loads(result.stdout)
+    except json.JSONDecodeError:
+        return None
+
+
+@pytest.fixture(scope="module", autouse=True)
+def leak_check(config_file, session_id):
+    """Fail the run if any instance created by these tests outlives them.
+
+    A destroy that quietly fails used to leave one VM running per CI run until
+    the provider's instance limit was hit (issue #102).  The teardown below both
+    cleans up whatever survived and makes the leak visible.
+    """
+    yield
+
+    leftovers = _list_session_instances(config_file, session_id)
+    if not leftovers:
+        return
+
+    names = [f"{i['name']} ({i['id']})" for i in leftovers]
+    for leftover in leftovers:
+        run_machine(
+            "--verbose",
+            "destroy",
+            "--no-confirm",
+            "--delete-dns",
+            str(leftover["id"]),
+            config_file=config_file,
+            session_id=session_id,
+        )
+    still_there = _list_session_instances(config_file, session_id)
+    pytest.fail(
+        f"E2E tests leaked {len(leftovers)} instance(s): {', '.join(names)}. "
+        + (
+            f"{len(still_there)} still running after cleanup — delete manually."
+            if still_there
+            else "They were cleaned up by the leak check."
+        )
+    )
+
+
 @pytest.fixture(scope="class")
 def instance(config_file, session_id):
     """Create a single instance with all features and destroy it after all tests.
@@ -282,6 +333,8 @@ def instance(config_file, session_id):
         session_id=session_id,
     )
     if destroy_result.returncode != 0:
+        # Do not fail here — the module-scoped leak_check fixture decides that,
+        # after it has had a chance to clean up. But make the reason visible.
         print(f"TEARDOWN WARNING: destroy exited {destroy_result.returncode}", flush=True)
         print(f"  stdout: {destroy_result.stdout}", flush=True)
         print(f"  stderr: {destroy_result.stderr}", flush=True)

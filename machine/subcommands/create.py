@@ -71,6 +71,12 @@ def command(context, name, tag, type, region, machine_size, image, wait_for_ip, 
     # Verify SSH keys exist
     _verify_ssh_keys(provider, config.ssh_keys)
 
+    # Validate what will actually be used, not just what was passed on the
+    # command line, so that a bad value in the config file is caught too.
+    region = region if region is not None else config.region
+    image = image if image is not None else config.image
+    size = machine_size if machine_size is not None else config.machine_size
+
     provider.validate_region(region)
     provider.validate_image(image)
 
@@ -85,9 +91,9 @@ def command(context, name, tag, type, region, machine_size, image, wait_for_ip, 
 
     vm = provider.create_vm(
         name=name,
-        region=region if region is not None else config.region,
-        image=image if image is not None else config.image,
-        size=machine_size if machine_size is not None else config.machine_size,
+        region=region,
+        image=image,
+        size=size,
         ssh_key_names=config.ssh_keys,
         tags=tags,
         user_data=user_data,
