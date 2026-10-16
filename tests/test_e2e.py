@@ -295,6 +295,7 @@ def leak_check(config_file, session_id):
 _CAPACITY_EXHAUSTED_MARKERS = (
     "ZONE_RESOURCE_POOL_EXHAUSTED",
     "does not have enough resources available",
+    "Size is not available in this region",
 )
 
 
