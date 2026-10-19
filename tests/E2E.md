@@ -81,7 +81,7 @@ If you use a service account, it needs at minimum:
 | `E2E_DO_DNS_ZONE` | Yes | DNS zone hosted at DigitalOcean (e.g. `do.example.com`) |
 | `E2E_PROJECT` | Yes | DO project to assign droplets to |
 
-Defaults: region `nyc1`, image `ubuntu-24-04-x64`, size `s-1vcpu-512mb-10gb`
+Defaults: region `nyc1`, image `ubuntu-24-04-x64`, size `s-1vcpu-1gb-intel`
 
 ### Vultr
 
