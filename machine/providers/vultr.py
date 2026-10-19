@@ -34,6 +34,7 @@ def _instance_to_vm(instance) -> VM:
         region=instance.get("region", ""),
         ip_address=instance.get("main_ip", ""),
         status=instance.get("status", ""),
+        size=instance.get("plan", ""),
     )
 
 

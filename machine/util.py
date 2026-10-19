@@ -41,6 +41,7 @@ def vm_to_json_obj(vm):
         "name": vm.name,
         "tags": vm.tags,
         "region": vm.region,
+        "size": vm.size,
         "ip": vm.ip_address,
         "type": get_machine_type(vm),
     }

@@ -164,6 +164,12 @@ The GitHub Actions workflow (`.github/workflows/e2e-test.yml`) runs e2e tests fo
 
 If credentials for a provider are not configured, that provider's test run will be skipped automatically.
 
+### Region fallback
+
+`TestRegionFallback` checks that `create` moves on to the next configured region when the provider has no capacity for the size in one. It is skipped unless `E2E_STOCKOUT` is set, and runs only from its own workflow (`.github/workflows/e2e-stockout-test.yml`), started by hand from the Actions tab, for DigitalOcean or Vultr (GCP can't say which zones have capacity).
+
+A real stockout can't be arranged, so a region that doesn't offer the size stands in for one: the provider refuses a create there the same way. By default the test asks the provider for such a region and skips if there isn't one; the workflow's `stockout-region` and `size` inputs (`E2E_STOCKOUT_REGION`, `E2E_SIZE`) choose one by hand. It creates one machine, in `E2E_REGION`, and destroys it.
+
 ## What's Tested
 
 - **Instance lifecycle** — create, list, destroy

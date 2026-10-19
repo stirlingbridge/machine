@@ -113,6 +113,7 @@ class GcpProvider(CloudProvider):
             region=zone,
             ip_address=ip_address,
             status=instance.status,
+            size=instance.machine_type.rsplit("/", 1)[-1],
         )
 
     def create_vm(self, name, region, image, size, ssh_key_names, tags, user_data) -> VM:

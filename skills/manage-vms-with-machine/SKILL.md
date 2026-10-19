@@ -110,9 +110,10 @@ machine create --name mybox --type example --wait-for-ip --output json
 - `--wait-for-ip` blocks until the IP is assigned — use it (or `--output json`, which
   reports the ip) so you can tell the user how to reach the machine.
 - `--region`, `--machine-size`, and `--image` override the config defaults per machine.
-- `region` in the config (or `--region`, repeated) can be a list of regions in order of
-  preference: when the provider is out of capacity for the size in one, `create` tries
-  the next, and reports the region it used (also the `region` in the JSON output).
+- `region` and `machine-size` in the config (or `--region` / `--machine-size`, repeated)
+  can each be a list in order of preference: when the provider is out of capacity for a
+  size in a region, `create` tries the next size, then the next region, and reports the
+  region and size it used (also `region` and `size` in the JSON output).
 
 The JSON output looks like:
 
@@ -122,6 +123,7 @@ The JSON output looks like:
   "name": "mybox",
   "tags": ["machine:created", "machine:type:example", "machine:session:abc12345"],
   "region": "nyc3",
+  "size": "s-4vcpu-8gb",
   "ip": "203.0.113.10",
   "type": "example"
 }

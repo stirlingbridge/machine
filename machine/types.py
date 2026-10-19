@@ -19,7 +19,7 @@ class Config:
     provider_config: dict
     ssh_keys: list
     dns_zone: str
-    machine_size: str
+    machine_sizes: list
     image: str
     regions: list
     project: str

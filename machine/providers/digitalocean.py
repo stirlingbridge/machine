@@ -4,7 +4,12 @@ from machine.log import fatal_error, info
 from machine.provider import CloudProvider, CapacityUnavailableError, VM, SSHKey, DNSRecord
 
 
-VALID_REGIONS = ["NYC1", "NYC3", "AMS3", "SFO2", "SFO3", "SGP1", "LON1", "FRA1", "TOR1", "BLR1", "SYD1"]
+# fmt: off
+VALID_REGIONS = [
+    "NYC1", "NYC3", "AMS3", "SFO2", "SFO3", "SGP1", "LON1", "FRA1",
+    "TOR1", "BLR1", "SYD1", "ATL1", "RIC1", "MKC1", "MEM1",
+]
+# fmt: on
 
 VALID_IMAGES = [
     "almalinux-8-x64",
@@ -37,6 +42,7 @@ def _droplet_to_vm(droplet) -> VM:
         region=region,
         ip_address=droplet.ip_address,
         status=droplet.status,
+        size=droplet.size_slug,
     )
 
 
@@ -46,6 +52,8 @@ class DigitalOceanProvider(CloudProvider):
             fatal_error("Required key 'access-token' not found in 'digital-ocean' section of config file")
         self.token = provider_config["access-token"]
         self._manager = digitalocean.Manager(token=self.token)
+        # The size list, fetched once for checking several regions and sizes.
+        self._sizes = None
 
     def create_vm(self, name, region, image, size, ssh_key_names, tags, user_data) -> VM:
         ssh_keys = []
@@ -70,7 +78,8 @@ class DigitalOceanProvider(CloudProvider):
             droplet.create()
         except digitalocean.DataReadError as e:
             # The wording of a stockout error isn't documented, so also ask
-            # whether the size is still offered in the region.
+            # (afresh) whether the size is still offered in the region.
+            self._sizes = None
             if any(m.lower() in str(e).lower() for m in CAPACITY_ERROR_MARKERS) or self.has_capacity(region, size) is False:
                 raise CapacityUnavailableError(f"DigitalOcean has no capacity for size {size} in region {region}: {e}")
             fatal_error(f"DigitalOcean API error creating VM: {e}")
@@ -159,11 +168,12 @@ class DigitalOceanProvider(CloudProvider):
     def has_capacity(self, region, size):
         # A size's regions are the ones it can be created in right now: those
         # out of stock are dropped from the list.
-        try:
-            sizes = self._manager.get_all_sizes()
-        except digitalocean.Error:
-            return None
-        for s in sizes:
+        if self._sizes is None:
+            try:
+                self._sizes = self._manager.get_all_sizes()
+            except digitalocean.Error:
+                return None
+        for s in self._sizes:
             if s.slug == size:
                 return bool(getattr(s, "available", True)) and region.lower() in [r.lower() for r in s.regions]
         return None

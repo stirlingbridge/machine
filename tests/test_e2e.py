@@ -30,6 +30,11 @@ Optional environment variables:
     E2E_REGION      - Region slug (default: provider-specific)
     E2E_IMAGE       - Image slug or ID (default: provider-specific)
     E2E_SIZE        - Machine size slug (default: provider-specific)
+
+Region fallback (stockout) tests, skipped unless E2E_STOCKOUT is set:
+    E2E_STOCKOUT         - Set to run the TestRegionFallback tests
+    E2E_STOCKOUT_REGION  - A region with no capacity for E2E_SIZE (default: one
+                           the provider says doesn't offer it, if there is one)
 """
 
 import json
@@ -86,9 +91,12 @@ elif E2E_PROVIDER == "gcp":
     E2E_DNS_ZONE = E2E_GCP_DNS_ZONE
 else:
     E2E_DNS_ZONE = None
-E2E_REGION = os.environ.get("E2E_REGION", _defaults["region"])
-E2E_IMAGE = os.environ.get("E2E_IMAGE", _defaults["image"])
-E2E_SIZE = os.environ.get("E2E_SIZE", _defaults["size"])
+# `or` rather than a get() default: a workflow input left blank arrives as "".
+E2E_REGION = os.environ.get("E2E_REGION") or _defaults["region"]
+E2E_IMAGE = os.environ.get("E2E_IMAGE") or _defaults["image"]
+E2E_SIZE = os.environ.get("E2E_SIZE") or _defaults["size"]
+E2E_STOCKOUT = os.environ.get("E2E_STOCKOUT")
+E2E_STOCKOUT_REGION = os.environ.get("E2E_STOCKOUT_REGION")
 
 # Provider-specific credentials
 E2E_DO_TOKEN = os.environ.get("E2E_DO_TOKEN")
@@ -566,3 +574,99 @@ class TestInstanceLifecycle:
         instances = json.loads(result.stdout)
         matched = [i for i in instances if str(i["id"]) == instance["id"]]
         assert len(matched) == 1, f"Instance not found with tag {instance['custom_tag']}"
+
+
+# ---------------------------------------------------------------------------
+# Region fallback — run on demand (E2E_STOCKOUT), not on every CI run
+# ---------------------------------------------------------------------------
+
+
+def _region_without_capacity():
+    """A region the provider says has no capacity for E2E_SIZE, or None.
+
+    A real stockout can't be arranged, so stand one in with a region the size
+    isn't offered in: the provider rejects a create there the same way.
+    """
+    if E2E_STOCKOUT_REGION:
+        return E2E_STOCKOUT_REGION
+    if E2E_PROVIDER == "digital-ocean":
+        from machine.providers.digitalocean import DigitalOceanProvider, VALID_REGIONS
+
+        provider = DigitalOceanProvider({"access-token": E2E_DO_TOKEN})
+    elif E2E_PROVIDER == "vultr":
+        from machine.providers.vultr import VultrProvider, VALID_REGIONS
+
+        provider = VultrProvider({"api-key": E2E_VULTR_API_KEY})
+    else:
+        return None  # GCP can't say which zones have capacity
+    for region in VALID_REGIONS:
+        region = region.lower()
+        if region != E2E_REGION.lower() and provider.has_capacity(region, E2E_SIZE) is False:
+            return region
+    return None
+
+
+@pytest.mark.skipif(not E2E_STOCKOUT, reason="E2E_STOCKOUT not set")
+class TestRegionFallback:
+    """Verify create falls back to the next region when the provider has no
+    capacity for the size in a region."""
+
+    @pytest.fixture(scope="class")
+    def full_region(self):
+        region = _region_without_capacity()
+        if not region:
+            pytest.skip(f"no region found without capacity for size '{E2E_SIZE}'; set E2E_STOCKOUT_REGION")
+        print(f"Region standing in for a stockout: {region}", flush=True)
+        return region
+
+    def test_region_without_capacity_is_tried_last(self, tmp_path, session_id, full_region):
+        """With the full region listed first, the machine is created in the next one."""
+        cfg_path = tmp_path / "config.yml"
+        _write_config(cfg_path, region=[full_region, E2E_REGION])
+        name = _unique_name()
+        result = run_machine(
+            "create",
+            "--name",
+            name,
+            "--no-initialize",
+            "--no-update-dns",
+            "--wait-for-ip",
+            "--output",
+            "json",
+            config_file=cfg_path,
+            session_id=session_id,
+        )
+        combined = result.stdout + result.stderr
+        if result.returncode != 0:
+            _fail_if_capacity_exhausted(combined)
+        assert result.returncode == 0, f"create failed: {combined}"
+        vm = json.loads(result.stdout)
+        try:
+            assert vm["region"].lower() == E2E_REGION.lower(), f"created in the wrong region: {combined}"
+            assert f"Region {full_region} reports no capacity" in result.stderr
+            assert f"Region: {vm['region']}" in result.stderr
+        finally:
+            run_machine("destroy", "--no-confirm", vm["id"], config_file=cfg_path, session_id=session_id)
+
+    def test_capacity_error_from_create_is_recognized(self, tmp_path, session_id, full_region):
+        """A create the provider refuses for lack of capacity is reported as
+        such, not as some other API error. With a single region there is no
+        capacity check beforehand, so this is the provider's own refusal."""
+        cfg_path = tmp_path / "config.yml"
+        _write_config(cfg_path, region=full_region)
+        result = run_machine(
+            "create",
+            "--name",
+            _unique_name(),
+            "--no-initialize",
+            "--no-update-dns",
+            config_file=cfg_path,
+            session_id=session_id,
+        )
+        combined = result.stdout + result.stderr
+        if result.returncode == 0:
+            instance_id = _extract_instance_id(combined)
+            if instance_id:
+                run_machine("destroy", "--no-confirm", instance_id, config_file=cfg_path, session_id=session_id)
+            pytest.fail(f"create unexpectedly succeeded in {full_region}: {combined}")
+        assert f"no capacity for size {E2E_SIZE} in any region tried: {full_region}" in result.stderr, combined

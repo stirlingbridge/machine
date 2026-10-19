@@ -10,6 +10,7 @@ class VM:
     region: str
     ip_address: str
     status: str
+    size: str = ""
 
 
 @dataclass

@@ -1,7 +1,7 @@
 import os
 import pytest
 from unittest.mock import patch
-from machine.config import _expand_env_vars, _get_regions, _get_ssh_keys
+from machine.config import _expand_env_vars, _get_machine_sizes, _get_regions, _get_ssh_keys
 
 
 class TestExpandEnvVars:
@@ -121,3 +121,19 @@ class TestGetRegions:
     def test_unsupported_type_exits(self):
         with pytest.raises(SystemExit):
             _get_regions({"region": {"unexpected": "mapping"}}, "digital-ocean")
+
+
+class TestGetMachineSizes:
+    """The 'machine-size' config value accepts either a single size or a list
+    of sizes to try in order."""
+
+    def test_single_size_returns_one_element_list(self):
+        assert _get_machine_sizes({"machine-size": "s-4vcpu-8gb"}, "digital-ocean") == ["s-4vcpu-8gb"]
+
+    def test_list_of_sizes_keeps_order(self):
+        sizes = ["s-4vcpu-8gb-intel", "s-4vcpu-8gb-amd"]
+        assert _get_machine_sizes({"machine-size": sizes}, "digital-ocean") == sizes
+
+    def test_empty_list_exits(self):
+        with pytest.raises(SystemExit):
+            _get_machine_sizes({"machine-size": []}, "digital-ocean")

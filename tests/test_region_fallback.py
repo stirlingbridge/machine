@@ -1,5 +1,6 @@
-"""Tests for creating a machine in the first of several regions that has
-capacity, for when a provider is out of stock of a size in a region."""
+"""Tests for creating a machine in the first of several regions, and with the
+first of several sizes, that has capacity, for when a provider is out of stock
+of a size in a region."""
 
 import json
 
@@ -26,8 +27,8 @@ def options():
 
 
 class FakeProvider:
-    """Out of capacity in the regions in `full`; `reported_full` is what
-    has_capacity says, which may be out of date."""
+    """Out of capacity in the regions (or (region, size) pairs) in `full`;
+    `reported_full` is what has_capacity says, which may be out of date."""
 
     def __init__(self, full=(), reported_full=()):
         self.full = set(full)
@@ -35,20 +36,21 @@ class FakeProvider:
         self.attempts = []
 
     def has_capacity(self, region, size):
-        return region not in self.reported_full
+        return region not in self.reported_full and (region, size) not in self.reported_full
 
     def create_vm(self, name, region, size, **kwargs):
-        self.attempts.append(region)
-        if region in self.full:
-            raise CapacityUnavailableError(f"no capacity in {region}")
-        return VM(id="1", name=name, tags=[], region=region, ip_address="", status="new")
+        self.attempts.append(region if self.single_size else (region, size))
+        if region in self.full or (region, size) in self.full:
+            raise CapacityUnavailableError(f"no capacity for {size} in {region}")
+        return VM(id="1", name=name, tags=[], region=region, ip_address="", status="new", size=size)
 
 
-def _create(provider, regions):
-    return create._create_in_first_region_with_capacity(provider, regions, "s-1", name="m", image="img")
+def _create(provider, regions, sizes=("s-1",)):
+    provider.single_size = len(sizes) == 1
+    return create._create_with_first_available(provider, regions, list(sizes), name="m", image="img")
 
 
-class TestCreateInFirstRegionWithCapacity:
+class TestCreateWithFirstAvailable:
     def test_single_region_with_capacity(self):
         provider = FakeProvider()
         assert _create(provider, ["nyc3"]).region == "nyc3"
@@ -76,6 +78,31 @@ class TestCreateInFirstRegionWithCapacity:
             _create(provider, ["nyc3", "nyc1"])
         assert provider.attempts == ["nyc3", "nyc1"]
         assert "no capacity for size s-1 in any region tried: nyc3, nyc1" in capsys.readouterr().err
+
+    def test_falls_back_to_next_size_in_the_same_region(self, capsys):
+        provider = FakeProvider(full={("nyc3", "s-1")})
+        vm = _create(provider, ["nyc3", "nyc1"], ["s-1", "s-1-intel"])
+        assert (vm.region, vm.size) == ("nyc3", "s-1-intel")
+        assert provider.attempts == [("nyc3", "s-1"), ("nyc3", "s-1-intel")]
+        assert "Size: s-1-intel" in capsys.readouterr().err
+
+    def test_every_size_is_tried_before_the_next_region(self):
+        provider = FakeProvider(full={"nyc3"})
+        vm = _create(provider, ["nyc3", "nyc1"], ["s-1", "s-1-intel"])
+        assert (vm.region, vm.size) == ("nyc1", "s-1")
+        assert provider.attempts == [("nyc3", "s-1"), ("nyc3", "s-1-intel"), ("nyc1", "s-1")]
+
+    def test_sizes_reported_full_are_tried_last(self):
+        provider = FakeProvider(reported_full={("nyc3", "s-1")})
+        vm = _create(provider, ["nyc3"], ["s-1", "s-1-intel"])
+        assert (vm.region, vm.size) == ("nyc3", "s-1-intel")
+        assert provider.attempts == [("nyc3", "s-1-intel")]
+
+    def test_no_capacity_for_any_size_lists_them(self, capsys):
+        provider = FakeProvider(full={"nyc3"})
+        with pytest.raises(SystemExit):
+            _create(provider, ["nyc3"], ["s-1", "s-1-intel"])
+        assert "no capacity for size s-1, s-1-intel in any region tried: nyc3" in capsys.readouterr().err
 
     def test_other_errors_are_not_retried(self):
         class FailingProvider(FakeProvider):
