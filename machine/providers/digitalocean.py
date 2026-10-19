@@ -1,7 +1,7 @@
 import digitalocean
 
 from machine.log import fatal_error, info
-from machine.provider import CloudProvider, VM, SSHKey, DNSRecord
+from machine.provider import CloudProvider, CapacityUnavailableError, VM, SSHKey, DNSRecord
 
 
 VALID_REGIONS = ["NYC1", "NYC3", "AMS3", "SFO2", "SFO3", "SGP1", "LON1", "FRA1", "TOR1", "BLR1", "SYD1"]
@@ -20,6 +20,10 @@ VALID_IMAGES = [
     "ubuntu-22-04-x64",
     "ubuntu-24-04-x64",
 ]
+
+
+# What DigitalOcean says when it is out of capacity for a size in a region.
+CAPACITY_ERROR_MARKERS = ["Size is not available in this region"]
 
 
 def _droplet_to_vm(droplet) -> VM:
@@ -65,6 +69,10 @@ class DigitalOceanProvider(CloudProvider):
         try:
             droplet.create()
         except digitalocean.DataReadError as e:
+            # The wording of a stockout error isn't documented, so also ask
+            # whether the size is still offered in the region.
+            if any(m.lower() in str(e).lower() for m in CAPACITY_ERROR_MARKERS) or self.has_capacity(region, size) is False:
+                raise CapacityUnavailableError(f"DigitalOcean has no capacity for size {size} in region {region}: {e}")
             fatal_error(f"DigitalOcean API error creating VM: {e}")
         return _droplet_to_vm(droplet)
 
@@ -147,6 +155,18 @@ class DigitalOceanProvider(CloudProvider):
     def validate_region(self, region):
         if region is not None and region.upper() not in VALID_REGIONS:
             fatal_error(f"Error: region {region} is not one of {VALID_REGIONS}")
+
+    def has_capacity(self, region, size):
+        # A size's regions are the ones it can be created in right now: those
+        # out of stock are dropped from the list.
+        try:
+            sizes = self._manager.get_all_sizes()
+        except digitalocean.Error:
+            return None
+        for s in sizes:
+            if s.slug == size:
+                return bool(getattr(s, "available", True)) and region.lower() in [r.lower() for r in s.regions]
+        return None
 
     def validate_image(self, image):
         if image is not None and image not in VALID_IMAGES:

@@ -3,7 +3,7 @@ import hashlib
 import os
 
 from machine.log import fatal_error, info
-from machine.provider import CloudProvider, VM, SSHKey, DNSRecord
+from machine.provider import CloudProvider, CapacityUnavailableError, VM, SSHKey, DNSRecord
 
 
 # Tags are stored as newline-separated values in instance metadata so that
@@ -13,6 +13,10 @@ _USER_DATA_METADATA_KEY = "user-data"
 _SSH_KEYS_METADATA_KEY = "ssh-keys"
 
 _DEFAULT_OPERATION_TIMEOUT = 300
+
+# What GCP says when a zone is out of capacity for a machine type (issue #109).
+# GCP has no way to ask beforehand, so these are all there is to go on.
+CAPACITY_ERROR_MARKERS = ["ZONE_RESOURCE_POOL_EXHAUSTED", "does not have enough resources available"]
 
 _GCP_SCOPES = ["https://www.googleapis.com/auth/cloud-platform"]
 
@@ -145,6 +149,8 @@ class GcpProvider(CloudProvider):
             op = self._instances.insert(project=self._project, zone=zone, instance_resource=instance)
             op.result(timeout=_DEFAULT_OPERATION_TIMEOUT)
         except Exception as e:
+            if any(m.lower() in str(e).lower() for m in CAPACITY_ERROR_MARKERS):
+                raise CapacityUnavailableError(f"GCP has no capacity for machine type {size} in zone {zone}: {e}")
             fatal_error(f"GCP API error creating VM: {e}")
 
         created = self._instances.get(project=self._project, zone=zone, instance=name)

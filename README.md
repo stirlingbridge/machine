@@ -95,7 +95,7 @@ machines:
 | `dns-zone` | No | DNS zone for automatic DNS record creation/deletion |
 | `machine-size` | Yes | Default machine size slug (e.g. `s-4vcpu-8gb`) |
 | `image` | Yes | Default image name (e.g. `ubuntu-22-04-x64`) |
-| `region` | Yes | Default region code (e.g. `nyc3`) |
+| `region` | Yes | Default region code (e.g. `nyc3`), or a list of regions to try in order (see [Multiple regions](#multiple-regions)) |
 | `project` | No | DigitalOcean project name to assign new machines to |
 
 Supported regions: `NYC1`, `NYC3`, `AMS3`, `SFO2`, `SFO3`, `SGP1`, `LON1`, `FRA1`, `TOR1`, `BLR1`, `SYD1`
@@ -127,7 +127,7 @@ machines:
 | `dns-zone` | No | DNS zone for automatic DNS record creation/deletion |
 | `machine-size` | Yes | Vultr plan slug (e.g. `vc2-1c-1gb`). Use `machine list-plans` or the Vultr API to list available plans |
 | `image` | Yes | Vultr OS ID (numeric, e.g. `2136` for Ubuntu 24.04). Use `machine list-os` or the Vultr API to list available OS IDs |
-| `region` | Yes | Vultr region code (e.g. `ewr`) |
+| `region` | Yes | Vultr region code (e.g. `ewr`), or a list of regions to try in order (see [Multiple regions](#multiple-regions)) |
 
 Supported regions: `ewr`, `ord`, `dfw`, `sea`, `lax`, `atl`, `ams`, `lhr`, `fra`, `sjc`, `syd`, `nrt`, `cdg`, `icn`, `mia`, `sgp`, `sto`, `mex`, `mad`, `sao`, `del`, `hnl`, `yto`, `blr`, `jnb`, `bom`, `tlv`
 
@@ -154,7 +154,7 @@ gcp:
 | `dns-zone` | No | DNS name of a [Cloud DNS](https://cloud.google.com/dns) managed zone (e.g. `example.com`) |
 | `machine-size` | Yes | GCE machine type (e.g. `e2-standard-2`) |
 | `image` | Yes | Image self-link or family path (e.g. `projects/debian-cloud/global/images/family/debian-12`) |
-| `region` | Yes | GCE *zone* (e.g. `us-central1-a`). Despite the key name, GCP requires a fully-qualified zone, not a region |
+| `region` | Yes | GCE *zone* (e.g. `us-central1-a`). Despite the key name, GCP requires a fully-qualified zone, not a region. A list of zones to try in order is also accepted (see [Multiple regions](#multiple-regions)) |
 
 **Authentication:**
 
@@ -238,6 +238,26 @@ The single-name form is unchanged and remains fully supported:
 ```yaml
     ssh-key: my-ssh-key-name
 ```
+
+#### Multiple regions
+
+Providers sometimes run out of a machine size in a region for a while (a "stockout"). To ride that out, the `region` config value accepts a list of regions in order of preference, and `create` makes the machine in the first one with capacity:
+
+```yaml
+digital-ocean:
+    access-token: ${DO_API_TOKEN}
+    ssh-key: my-ssh-key-name
+    machine-size: s-4vcpu-8gb
+    image: ubuntu-22-04-x64
+    region:
+        - nyc3
+        - nyc1
+        - tor1
+```
+
+Before creating, `machine` asks the provider which of the regions currently offer the size (DigitalOcean and Vultr can say; GCP can't) and tries the ones that don't last, in case the answer is out of date. If the create itself fails because the provider is out of capacity, the next region is tried; any other error stops there. The region used is printed, and is in the `--output json` result. Only list regions you would be equally happy with: a machine in a different region has different latency to whatever it talks to.
+
+`--region` can be given more than once on the command line to override the list for one machine.
 
 #### Environment Variable Substitution
 
@@ -335,7 +355,8 @@ Options:
   -n, --name <MACHINE-NAME>         Name for new machine  [required]
   -t, --tag <TAG-TEXT>              Tag to be applied to new machine
   -m, --type <MACHINE-TYPE>        Machine type from config (required if --initialize)
-  -r, --region <REGION-CODE>       Region (overrides config default)
+  -r, --region <REGION-CODE>       Region (overrides config default); repeat to
+                                    give regions to try in order
   -s, --machine-size <MACHINE-SLUG>
                                     Machine size (overrides config default)
   -i, --image <IMAGE-NAME>         Image (overrides config default)

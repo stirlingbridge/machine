@@ -75,6 +75,22 @@ def _get_ssh_keys(provider_config, section_name) -> list:
     return keys
 
 
+def _get_regions(provider_config, section_name) -> list:
+    """Read the 'region' config value, accepting either a single region (a
+    string) or a list of regions in order of preference. Always returns a
+    non-empty list."""
+    value = _require_key(provider_config, "region", section_name)
+    if isinstance(value, str):
+        regions = [value]
+    elif isinstance(value, list):
+        regions = [str(r) for r in value]
+    else:
+        fatal_error(f"Config key 'region' in '{section_name}' section must be a region or a list of regions")
+    if not regions:
+        fatal_error(f"Config key 'region' in '{section_name}' section must specify at least one region")
+    return regions
+
+
 def get(config_file_name: str) -> Config:
     config = _load_config_data(config_file_name)
 
@@ -99,7 +115,7 @@ def get(config_file_name: str) -> Config:
         dns_zone=provider_config.get("dns-zone"),
         machine_size=_require_key(provider_config, "machine-size", provider_name),
         image=_require_key(provider_config, "image", provider_name),
-        region=_require_key(provider_config, "region", provider_name),
+        regions=_get_regions(provider_config, provider_name),
         project=provider_config.get("project"),
     )
 

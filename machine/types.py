@@ -21,7 +21,7 @@ class Config:
     dns_zone: str
     machine_size: str
     image: str
-    region: str
+    regions: list
     project: str
 
 

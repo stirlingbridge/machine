@@ -1,7 +1,7 @@
 import os
 import pytest
 from unittest.mock import patch
-from machine.config import _expand_env_vars, _get_ssh_keys
+from machine.config import _expand_env_vars, _get_regions, _get_ssh_keys
 
 
 class TestExpandEnvVars:
@@ -98,3 +98,26 @@ class TestGetSshKeys:
     def test_unsupported_type_exits(self):
         with pytest.raises(SystemExit):
             _get_ssh_keys({"ssh-key": {"unexpected": "mapping"}}, "digital-ocean")
+
+
+class TestGetRegions:
+    """The 'region' config value accepts either a single region or a list of
+    regions to try in order; both forms normalize to a non-empty list."""
+
+    def test_single_region_returns_one_element_list(self):
+        assert _get_regions({"region": "nyc3"}, "digital-ocean") == ["nyc3"]
+
+    def test_list_of_regions_keeps_order(self):
+        assert _get_regions({"region": ["nyc3", "nyc1", "tor1"]}, "digital-ocean") == ["nyc3", "nyc1", "tor1"]
+
+    def test_missing_key_exits(self):
+        with pytest.raises(SystemExit):
+            _get_regions({}, "digital-ocean")
+
+    def test_empty_list_exits(self):
+        with pytest.raises(SystemExit):
+            _get_regions({"region": []}, "digital-ocean")
+
+    def test_unsupported_type_exits(self):
+        with pytest.raises(SystemExit):
+            _get_regions({"region": {"unexpected": "mapping"}}, "digital-ocean")

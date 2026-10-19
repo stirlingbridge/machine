@@ -4,7 +4,7 @@ import time
 from vultr import Vultr, VultrException
 
 from machine.log import fatal_error, info
-from machine.provider import CloudProvider, VM, SSHKey, DNSRecord
+from machine.provider import CloudProvider, CapacityUnavailableError, VM, SSHKey, DNSRecord
 
 
 # fmt: off
@@ -67,6 +67,10 @@ class VultrProvider(CloudProvider):
         try:
             result = self._client.create_instance(region, size, **kwargs)
         except VultrException as e:
+            # Vultr's wording for a stockout isn't known, so ask whether the
+            # plan is still offered in the region instead.
+            if self.has_capacity(region, size) is False:
+                raise CapacityUnavailableError(f"Vultr has no capacity for plan {size} in region {region}: {e}")
             fatal_error(f"Error creating instance: {e}")
 
         return _instance_to_vm(result)
@@ -213,6 +217,16 @@ class VultrProvider(CloudProvider):
     def validate_region(self, region):
         if region is not None and region.lower() not in VALID_REGIONS:
             fatal_error(f"Error: region {region} is not one of {VALID_REGIONS}")
+
+    def has_capacity(self, region, size):
+        try:
+            result = self._client.get(f"/regions/{region}/availability")
+        except VultrException:
+            return None
+        plans = result.get("available_plans") if isinstance(result, dict) else None
+        if plans is None:
+            return None
+        return size in plans
 
     def validate_image(self, image):
         try:
