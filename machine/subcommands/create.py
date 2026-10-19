@@ -5,6 +5,7 @@ import time
 from machine.config import get_machine
 from machine.di import d
 from machine.log import Spinner, fatal_error, info, debug, output as log_output
+from machine.provider import CapacityUnavailableError
 from machine.types import MainCmdCtx, TAG_MACHINE_CREATED, TAG_MACHINE_TYPE_PREFIX
 from machine.cloud_config import get_user_data
 from machine.util import vm_to_json_obj
@@ -25,13 +26,54 @@ def _verify_ssh_keys(provider, ssh_key_names):
             fatal_error(f"Error: SSH key '{ssh_key_name}' not found in {provider.provider_name}")
 
 
+def _order_by_capacity(provider, choices):
+    """Move the (region, size) choices the provider says have no capacity to
+    the end, keeping the order of preference otherwise. They are still tried
+    last, in case the provider's answer is out of date."""
+    if len(choices) < 2:
+        return choices
+    full = [c for c in choices if provider.has_capacity(*c) is False]
+    for region, size in full:
+        info(f"Region {region} reports no capacity for size {size}, trying it last")
+    return [c for c in choices if c not in full] + full
+
+
+def _create_with_first_available(provider, regions, sizes, **create_args):
+    """Create the VM in the first of `regions`, with the first of `sizes`, that
+    the provider has capacity for. Every size is tried in a region before the
+    next region: where a machine runs usually matters more than its exact size."""
+    choices = [(region, size) for region in regions for size in sizes]
+    for region, size in _order_by_capacity(provider, choices):
+        try:
+            vm = provider.create_vm(region=region, size=size, **create_args)
+        except CapacityUnavailableError as e:
+            info(str(e))
+            continue
+        if len(regions) > 1 and not d.opt.quiet:
+            info(f"Region: {region}")
+        if len(sizes) > 1 and not d.opt.quiet:
+            info(f"Size: {size}")
+        return vm
+    fatal_error(f"Error: no capacity for size {', '.join(sizes)} in any region tried: {', '.join(regions)}")
+
+
 @click.command(help="Create a machine")
 @click.option("--name", "-n", required=True, metavar="<MACHINE-NAME>", help="Name for new machine")
 @click.option("--tag", "-t", metavar="<TAG-TEXT>", help="tag to be applied to new machine")
 @click.option("--type", "-m", metavar="<MACHINE-TYPE>", help="create a machine of this type")
-@click.option("--region", "-r", metavar="<REGION-CODE>", help="create a machine in this region (overrides default from config)")
 @click.option(
-    "--machine-size", "-s", metavar="<MACHINE-SLUG>", help="create a machine of this size (overrides default from config)"
+    "--region",
+    "-r",
+    metavar="<REGION-CODE>",
+    multiple=True,
+    help="create a machine in this region (overrides default from config); repeat to give regions to try in order",
+)
+@click.option(
+    "--machine-size",
+    "-s",
+    metavar="<MACHINE-SLUG>",
+    multiple=True,
+    help="create a machine of this size (overrides default from config); repeat to give sizes to try in order",
 )
 @click.option("--image", "-i", metavar="<IMAGE-NAME>", help="create a machine from this image (overrides default from config)")
 @click.option("--wait-for-ip/--no-wait-for-ip", default=False)
@@ -73,11 +115,12 @@ def command(context, name, tag, type, region, machine_size, image, wait_for_ip, 
 
     # Validate what will actually be used, not just what was passed on the
     # command line, so that a bad value in the config file is caught too.
-    region = region if region is not None else config.region
+    regions = list(region) if region else config.regions
     image = image if image is not None else config.image
-    size = machine_size if machine_size is not None else config.machine_size
+    sizes = list(machine_size) if machine_size else config.machine_sizes
 
-    provider.validate_region(region)
+    for r in regions:
+        provider.validate_region(r)
     provider.validate_image(image)
 
     tags = [
@@ -89,11 +132,12 @@ def command(context, name, tag, type, region, machine_size, image, wait_for_ip, 
     if tag:
         tags.append(tag)
 
-    vm = provider.create_vm(
+    vm = _create_with_first_available(
+        provider,
+        regions,
+        sizes,
         name=name,
-        region=region,
         image=image,
-        size=size,
         ssh_key_names=config.ssh_keys,
         tags=tags,
         user_data=user_data,
