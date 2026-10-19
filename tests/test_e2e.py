@@ -52,10 +52,13 @@ import pytest
 E2E_PROVIDER = os.environ.get("E2E_PROVIDER", "digital-ocean")
 
 _PROVIDER_DEFAULTS = {
+    # The -intel variant rather than the vendor-less basic sizes, which DO is
+    # retiring and which were often out of stock in nyc1. There's no 512mb
+    # -intel size, so this is the smallest one.
     "digital-ocean": {
         "region": "nyc1",
         "image": "ubuntu-24-04-x64",
-        "size": "s-1vcpu-512mb-10gb",
+        "size": "s-1vcpu-1gb-intel",
     },
     "vultr": {
         "region": "ewr",
