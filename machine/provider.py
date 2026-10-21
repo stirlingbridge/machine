@@ -1,6 +1,9 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
+from machine.log import fatal_error
+from machine.types import FirewallConfig
+
 
 @dataclass
 class VM:
@@ -75,6 +78,10 @@ class CloudProvider(ABC):
 
     def assign_to_project(self, project_name, vm_id):
         pass
+
+    def apply_firewall(self, name, tag, firewall: FirewallConfig):
+        """Create or update the named firewall so that it applies to all machines with the given tag."""
+        fatal_error(f"Error: firewalls are not supported for {self.provider_name}")
 
     def validate_region(self, region):
         pass

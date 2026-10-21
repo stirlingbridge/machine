@@ -1,7 +1,11 @@
+import re
+
 import digitalocean
+from digitalocean.baseapi import POST, PUT
 
 from machine.log import fatal_error, info
 from machine.provider import CloudProvider, VM, SSHKey, DNSRecord
+from machine.types import FirewallConfig
 
 
 VALID_REGIONS = ["NYC1", "NYC3", "AMS3", "SFO2", "SFO3", "SGP1", "LON1", "FRA1", "TOR1", "BLR1", "SYD1"]
@@ -20,6 +24,31 @@ VALID_IMAGES = [
     "ubuntu-22-04-x64",
     "ubuntu-24-04-x64",
 ]
+
+
+# A DigitalOcean firewall with no outbound rules blocks all outbound traffic, so
+# "outbound not specified" has to be spelled out as allow-all.
+_ALL_ADDRESSES = ["0.0.0.0/0", "::/0"]
+_ALLOW_ALL_OUTBOUND = [
+    {"protocol": "tcp", "ports": "all", "destinations": {"addresses": _ALL_ADDRESSES}},
+    {"protocol": "udp", "ports": "all", "destinations": {"addresses": _ALL_ADDRESSES}},
+    {"protocol": "icmp", "destinations": {"addresses": _ALL_ADDRESSES}},
+]
+
+
+def _firewall_name(name) -> str:
+    # Firewall names must start with an alphanumeric and contain only alphanumerics, '.' and '-'
+    return re.sub(r"[^A-Za-z0-9.-]", "-", name).lstrip(".-")
+
+
+def _firewall_rules(rules, address_key) -> list:
+    ret = []
+    for rule in rules:
+        do_rule = {"protocol": rule.protocol, address_key: {"addresses": rule.addresses}}
+        if rule.protocol != "icmp":
+            do_rule["ports"] = rule.ports
+        ret.append(do_rule)
+    return ret
 
 
 def _droplet_to_vm(droplet) -> VM:
@@ -149,6 +178,34 @@ class DigitalOceanProvider(CloudProvider):
         if not project:
             fatal_error(f"Error: Project {project_name} does not exist, machine created but not assigned to project")
         project.assign_resource([f"do:droplet:{vm_id}"])
+
+    def apply_firewall(self, name, tag, firewall: FirewallConfig):
+        name = _firewall_name(name)
+        # The firewall can only reference a tag that already exists
+        try:
+            digitalocean.Tag(token=self.token, name=tag).create()
+        except digitalocean.DataReadError as e:
+            fatal_error(f"DigitalOcean API error creating tag {tag}: {e}")
+        params = {
+            "name": name,
+            "tags": [tag],
+            "inbound_rules": _firewall_rules(firewall.inbound, "sources"),
+            "outbound_rules": (
+                _ALLOW_ALL_OUTBOUND if firewall.outbound is None else _firewall_rules(firewall.outbound, "destinations")
+            ),
+        }
+        existing = next((f for f in self._manager.get_all_firewalls() if f.name == name), None)
+        try:
+            if existing:
+                # PUT replaces the whole firewall, so carry over anything else it's attached to
+                params["tags"] = sorted(set((existing.tags or []) + [tag]))
+                params["droplet_ids"] = existing.droplet_ids or []
+                self._manager.get_data(f"firewalls/{existing.id}", type=PUT, params=params)
+            else:
+                self._manager.get_data("firewalls", type=POST, params=params)
+        except digitalocean.DataReadError as e:
+            fatal_error(f"DigitalOcean API error applying firewall {name}: {e}")
+        return name
 
     def validate_region(self, region):
         if region is not None and region.upper() not in VALID_REGIONS:
