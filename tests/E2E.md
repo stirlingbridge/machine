@@ -25,7 +25,8 @@ The DigitalOcean API token must be a **custom token** with these scopes enabled:
 | `ssh_key` | read | Looking up SSH keys by name |
 | `domain` | read, create, delete | Creating and removing DNS A records |
 | `project` | read, update | Listing projects and assigning droplets to them |
-| `tag` | read, create | Tagging droplets by type and custom tags |
+| `tag` | read, create, delete | Tagging droplets by type and custom tags; removing the firewall test's type tag |
+| `firewall` | read, create, update, delete | The firewall tests (see [Firewalls](#firewalls)) |
 
 A full-access read/write token will also work, but a scoped token is recommended.
 
@@ -170,12 +171,18 @@ If credentials for a provider are not configured, that provider's test run will 
 
 A real stockout can't be arranged, so a region that doesn't offer the size stands in for one: the provider refuses a create there the same way. By default the test asks the provider for such a region and skips if there isn't one; the workflow's `stockout-region` and `size` inputs (`E2E_STOCKOUT_REGION`, `E2E_SIZE`) choose one by hand. It creates one machine, in `E2E_REGION`, and destroys it.
 
-## What's Tested
+### Firewalls
+
+`TestFirewall` runs on DigitalOcean only, as part of the normal e2e run. It defines a machine type, unique to the run, whose firewall lets ssh in only from the address [api.ipify.org](https://api.ipify.org) reports for the host running the tests, and creates a machine of that type (without initializing it, so it is the stock image's sshd). It checks the firewall through the API (one firewall, `machine-<type>`, attached to the type's tag, with the configured rules) and that port 22 answers. It then changes the rules to a source the host isn't in and creates a second machine of the type, which must update the same firewall, after which the first machine's port 22 must stop answering.
+
+`destroy` leaves firewalls and tags in place, so the test deletes its firewall and tag itself. If a run is killed before then, they are left behind: look for firewalls named `machine-e2e-fw-*`.
+
 
 - **Instance lifecycle** — create, list, destroy
 - **DNS lifecycle** — create with `--update-dns`, verify A record, destroy with `--delete-dns`
 - **Cloud-init initialization** — create with `--type`, verify type tag
 - **Custom tags** — create with `--tag`, verify tag filtering
+- **Firewalls** (DigitalOcean) — create with a type that has a firewall, verify its rules and that they are enforced, and that changing them updates existing machines
 
 ## Cleanup
 

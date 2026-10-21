@@ -1,10 +1,11 @@
+import ipaddress
 import os
 import re
 from pathlib import Path
 from machine.di import d
 from machine.factory import yaml
 from machine.log import fatal_error, debug
-from machine.types import Config, MachineConfig
+from machine.types import Config, FirewallConfig, FirewallRule, MachineConfig
 from machine import constants
 from machine.providers import KNOWN_PROVIDERS
 
@@ -90,6 +91,59 @@ def _get_machine_sizes(provider_config, section_name) -> list:
     return _get_list(provider_config, "machine-size", section_name, "size")
 
 
+_FIREWALL_PROTOCOLS = ("tcp", "udp", "icmp")
+_firewall_ports_pattern = re.compile(r"^(all|\d{1,5}(-\d{1,5})?)$")
+
+
+def _get_firewall_rules(rules, section_name, address_key) -> list:
+    if not isinstance(rules, list):
+        fatal_error(f"Config key '{section_name}' must be a list of rules")
+    ret = []
+    for i, rule in enumerate(rules):
+        rule_section = f"{section_name}[{i}]"
+        if not isinstance(rule, dict):
+            fatal_error(f"Firewall rule '{rule_section}' must be a mapping")
+        protocol = str(_require_key(rule, "protocol", rule_section)).lower()
+        if protocol not in _FIREWALL_PROTOCOLS:
+            fatal_error(f"Firewall rule '{rule_section}' protocol must be one of: {', '.join(_FIREWALL_PROTOCOLS)}")
+        ports = rule.get("ports")
+        if protocol == "icmp":
+            if ports is not None:
+                fatal_error(f"Firewall rule '{rule_section}' is icmp and cannot specify ports")
+        else:
+            ports = "all" if ports is None else str(ports)
+            if not _firewall_ports_pattern.match(ports):
+                fatal_error(f"Firewall rule '{rule_section}' ports must be 'all', a port, or a range like 8000-9000")
+        addresses = _require_key(rule, address_key, rule_section)
+        if isinstance(addresses, str):
+            addresses = [addresses]
+        if not isinstance(addresses, list) or not addresses:
+            fatal_error(f"Firewall rule '{rule_section}' must specify at least one address in '{address_key}'")
+        for address in addresses:
+            try:
+                ipaddress.ip_network(str(address), strict=False)
+            except ValueError:
+                fatal_error(f"Firewall rule '{rule_section}' has invalid address: {address}")
+        ret.append(FirewallRule(protocol=protocol, ports=ports, addresses=[str(a) for a in addresses]))
+    return ret
+
+
+def _get_firewall(target_config, section_name) -> FirewallConfig:
+    """Read a machine type's optional 'firewall' section. Omitting 'outbound'
+    allows all outbound traffic; an empty 'outbound' blocks it all."""
+    firewall = target_config.get("firewall")
+    if firewall is None:
+        return None
+    section_name = f"{section_name}.firewall"
+    if not isinstance(firewall, dict):
+        fatal_error(f"Config key '{section_name}' must be a mapping")
+    inbound = _get_firewall_rules(firewall.get("inbound") or [], f"{section_name}.inbound", "sources")
+    outbound = None
+    if "outbound" in firewall:
+        outbound = _get_firewall_rules(firewall["outbound"] or [], f"{section_name}.outbound", "destinations")
+    return FirewallConfig(inbound=inbound, outbound=outbound)
+
+
 def get(config_file_name: str) -> Config:
     config = _load_config_data(config_file_name)
 
@@ -140,7 +194,14 @@ def get_machine(name: str) -> MachineConfig:
         target_config.get("script-dir"),
         target_config.get("script-path"),
         script_args,
+        _get_firewall(target_config, f"machines.{name}"),
     )
+
+
+def has_machine(name: str) -> bool:
+    if not _loaded_config.c:
+        fatal_error("Attempt to fetch machine data before config loaded")
+    return name in (_loaded_config.c.get("machines") or {})
 
 
 def get_machines():

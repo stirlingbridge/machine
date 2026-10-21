@@ -200,6 +200,7 @@ Each entry under `machines:` defines a machine type that can be referenced with 
 | `script-dir` | No | Directory to store the initialization script |
 | `script-path` | No | Full path for the initialization script |
 | `script-args` | No | Arguments passed to the initialization script (supports variable expansion). Either a single string, or a list where each item is passed to the script as exactly one shell argument |
+| `firewall` | No | Cloud firewall rules applied to machines of this type (DigitalOcean only, see [Firewalls](#firewalls)) |
 
 If `script-url`, `script-dir`, and `script-path` are all provided, the script is downloaded and executed as the new user during cloud-init.
 
@@ -217,6 +218,46 @@ The following variables are available for expansion in `script-args` (both forms
 - `$MACHINE_SCRIPT_URL` — URL of the initialization script
 - `$MACHINE_SCRIPT_DIR` — directory path for the script
 - `$MACHINE_FQDN` — fully qualified domain name of the machine (if DNS is configured)
+
+#### Firewalls
+
+A machine type can define cloud firewall rules, which the provider enforces outside the machine itself:
+
+```yaml
+machines:
+    acme-host:
+        new-user-name: bpi
+        firewall:
+            inbound:
+                - protocol: tcp
+                  ports: 2222
+                  sources: [203.0.113.10/32, 198.51.100.7/32]
+            outbound:
+                - protocol: udp
+                  ports: 53
+                  destinations: [0.0.0.0/0, "::/0"]
+                - protocol: udp
+                  ports: 123
+                  destinations: [0.0.0.0/0, "::/0"]
+                - protocol: tcp
+                  ports: 80
+                  destinations: [0.0.0.0/0, "::/0"]
+                - protocol: tcp
+                  ports: 443
+                  destinations: [0.0.0.0/0, "::/0"]
+                - protocol: tcp
+                  ports: 22
+                  destinations: [192.0.2.20/32, 192.0.2.21/32]
+```
+
+Each rule has a `protocol` (`tcp`, `udp` or `icmp`), `ports` for tcp/udp (a port, a range like `8000-9000`, or `all`, which is the default), and `sources` (inbound) or `destinations` (outbound): a list of IPv4/IPv6 addresses or CIDRs.
+
+- Inbound traffic not matched by a rule is dropped. An empty or missing `inbound` blocks all inbound traffic, including ssh.
+- If `outbound` is omitted, all outbound traffic is allowed. If it's present, everything else is dropped, and an empty list blocks all outbound traffic.
+
+`create` sets up a firewall named `machine-<type>`, attached to the machine type's tag (`machine:type:<type>`), *before* creating the machine, so the machine is protected from first boot. Because the firewall is attached by tag, it covers every machine of that type in the account. Each `create` overwrites the firewall's rules with those in the config, so editing the config and creating another machine updates the rules for all of them. `destroy` leaves the firewall in place.
+
+The DigitalOcean access token needs the `firewall` and `tag` scopes in addition to those `create` already uses. Firewalls aren't yet supported for Vultr or GCP: a machine type with a `firewall` section fails to create on those providers.
 
 #### Multiple SSH keys
 

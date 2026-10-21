@@ -2,7 +2,7 @@ import click
 import json
 import time
 
-from machine.config import get_machine
+from machine.config import get_machine, has_machine
 from machine.di import d
 from machine.log import Spinner, fatal_error, info, debug, output as log_output
 from machine.provider import CapacityUnavailableError
@@ -24,6 +24,27 @@ def _verify_ssh_keys(provider, ssh_key_names):
     for ssh_key_name in ssh_key_names:
         if not provider.get_ssh_key(ssh_key_name):
             fatal_error(f"Error: SSH key '{ssh_key_name}' not found in {provider.provider_name}")
+
+
+def _get_machine_config(type, initialize):
+    # Without --initialize a type may just be a label, but if it is configured we still want its firewall
+    if initialize and not type:
+        fatal_error("Error: a machine type must be supplied")
+    if not type or not (initialize or has_machine(type)):
+        return None
+    machine_config = get_machine(type)
+    if not machine_config:
+        fatal_error(f"Error: machine type {type} is not defined")
+    return machine_config
+
+
+def _apply_firewall(provider, type, machine_config):
+    # The firewall is attached to the machine type's tag, so it covers every machine of that type
+    firewall_name = provider.apply_firewall(
+        f"machine-{type.lower()}", TAG_MACHINE_TYPE_PREFIX + type.lower(), machine_config.firewall
+    )
+    if not d.opt.quiet:
+        info(f"Firewall: {firewall_name}")
 
 
 def _order_by_capacity(provider, choices):
@@ -97,13 +118,10 @@ def command(context, name, tag, type, region, machine_size, image, wait_for_ip, 
     if update_dns and config.dns_zone:
         _validate_dns_zone(provider, config.dns_zone)
 
+    machine_config = _get_machine_config(type, initialize)
+
     user_data = None
     if initialize:
-        if not type:
-            fatal_error("Error: a machine type must be supplied")
-        machine_config = get_machine(type)
-        if not machine_config:
-            fatal_error(f"Error: machine type {type} is not defined")
         fqdn = f"{name}.{config.dns_zone}" if config.dns_zone else None
         user_data = get_user_data(provider, config.ssh_keys, fqdn, machine_config)
         if d.opt.debug:
@@ -129,8 +147,13 @@ def command(context, name, tag, type, region, machine_size, image, wait_for_ip, 
     ]
     if type:
         tags.append(TAG_MACHINE_TYPE_PREFIX + type.lower())
+
     if tag:
         tags.append(tag)
+
+    # Apply the firewall before the machine exists, so it is protected from first boot
+    if machine_config and machine_config.firewall:
+        _apply_firewall(provider, type, machine_config)
 
     vm = _create_with_first_available(
         provider,

@@ -31,15 +31,23 @@ Optional environment variables:
     E2E_IMAGE       - Image slug or ID (default: provider-specific)
     E2E_SIZE        - Machine size slug (default: provider-specific)
 
+Firewall tests run on DigitalOcean only. The token needs the firewall and tag
+scopes, and the host running the tests must be able to reach the machines' port
+22 directly, from the address api.ipify.org reports for it.
+
 Region fallback (stockout) tests, skipped unless E2E_STOCKOUT is set:
     E2E_STOCKOUT         - Set to run the TestRegionFallback tests
     E2E_STOCKOUT_REGION  - A region with no capacity for E2E_SIZE (default: one
                            the provider says doesn't offer it, if there is one)
 """
 
+import ipaddress
 import json
 import os
+import socket
 import subprocess
+import time
+import urllib.request
 import uuid
 
 import pytest
@@ -577,6 +585,201 @@ class TestInstanceLifecycle:
         instances = json.loads(result.stdout)
         matched = [i for i in instances if str(i["id"]) == instance["id"]]
         assert len(matched) == 1, f"Instance not found with tag {instance['custom_tag']}"
+
+
+# ---------------------------------------------------------------------------
+# Firewalls — DigitalOcean only
+# ---------------------------------------------------------------------------
+
+
+def _write_firewall_config(path, type_name, ssh_sources):
+    """Write the e2e config plus a machine type whose firewall lets ssh in from
+    ssh_sources only, and lets out only https and DNS."""
+    _write_config(path)
+    sources = ", ".join(f'"{s}"' for s in ssh_sources)
+    with open(path, "a") as f:
+        f.write(
+            f"  {type_name}:\n"
+            "    new-user-name: e2euser\n"
+            "    firewall:\n"
+            "      inbound:\n"
+            "        - protocol: tcp\n"
+            "          ports: 22\n"
+            f"          sources: [{sources}]\n"
+            "      outbound:\n"
+            "        - protocol: tcp\n"
+            "          ports: 443\n"
+            '          destinations: [0.0.0.0/0, "::/0"]\n'
+            "        - protocol: udp\n"
+            "          ports: 53\n"
+            '          destinations: [0.0.0.0/0, "::/0"]\n'
+        )
+
+
+def _do_manager():
+    import digitalocean
+
+    return digitalocean.Manager(token=E2E_DO_TOKEN)
+
+
+def _get_firewalls(name):
+    """The firewalls with this name, as the API returns them."""
+    return [f for f in _do_manager().get_data("firewalls")["firewalls"] if f["name"] == name]
+
+
+def _rules(rules, address_key):
+    """A firewall's rules as comparable tuples, with addresses normalized: the
+    API may not return them exactly as they were given."""
+    return sorted(
+        (
+            r["protocol"],
+            r.get("ports"),
+            tuple(sorted(str(ipaddress.ip_network(a, strict=False)) for a in r[address_key]["addresses"])),
+        )
+        for r in rules
+    )
+
+
+def _port_answers(ip, port):
+    """Whether something accepts a TCP connection. A port the firewall drops
+    never answers, so this times out rather than being refused."""
+    try:
+        with socket.create_connection((ip, port), timeout=5):
+            return True
+    except OSError:
+        return False
+
+
+def _wait_for_port(ip, port, answers, timeout):
+    """Wait for the port to answer (or to stop answering); False on timeout."""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if _port_answers(ip, port) == answers:
+            return True
+        time.sleep(5)
+    return False
+
+
+def _create_firewalled_machine(config_path, type_name, session_id):
+    result = run_machine(
+        "create",
+        "--name",
+        _unique_name(),
+        "--type",
+        type_name,
+        "--no-initialize",
+        "--no-update-dns",
+        "--wait-for-ip",
+        "--output",
+        "json",
+        config_file=config_path,
+        session_id=session_id,
+    )
+    combined = result.stdout + result.stderr
+    if result.returncode != 0:
+        _fail_if_capacity_exhausted(combined)
+    assert result.returncode == 0, f"create failed: {combined}"
+    return json.loads(result.stdout), result.stderr
+
+
+@pytest.mark.skipif(E2E_PROVIDER != "digital-ocean", reason="firewalls are supported on DigitalOcean only")
+class TestFirewall:
+    """Create a machine of a type with a firewall, then a second machine after
+    changing the type's rules, and check what the firewall does to the first.
+
+    The tests run in order and build on each other. The type name is unique to
+    the run, so concurrent runs don't share a firewall.
+    """
+
+    @pytest.fixture(scope="class")
+    def runner_ip(self):
+        with urllib.request.urlopen("https://api.ipify.org", timeout=15) as response:
+            return response.read().decode().strip()
+
+    @pytest.fixture(scope="class")
+    def firewalled(self, tmp_path_factory, session_id, runner_ip):
+        type_name = f"e2e-fw-{uuid.uuid4().hex[:6]}"
+        firewall_name = f"machine-{type_name}"
+        tag = f"machine:type:{type_name}"
+        config_path = tmp_path_factory.mktemp("e2e-fw") / "config.yml"
+        # The documentation range is never seen, but makes the rule a list
+        allowed = [f"{runner_ip}/32", "2001:db8::/32"]
+        _write_firewall_config(config_path, type_name, allowed)
+        info = {
+            "type": type_name,
+            "firewall_name": firewall_name,
+            "tag": tag,
+            "config_path": config_path,
+            "allowed": allowed,
+            "vm_ids": [],
+        }
+        try:
+            vm, stderr = _create_firewalled_machine(config_path, type_name, session_id)
+            info["vm_ids"].append(vm["id"])
+            info["vm"] = vm
+            info["create_err"] = stderr
+            yield info
+        finally:
+            for vm_id in info["vm_ids"]:
+                result = run_machine("destroy", "--no-confirm", str(vm_id), config_file=config_path, session_id=session_id)
+                if result.returncode != 0:
+                    print(f"TEARDOWN WARNING: destroy {vm_id} exited {result.returncode}: {result.stderr}", flush=True)
+            # destroy leaves the firewall and the tag, so remove them here
+            import digitalocean
+
+            for firewall in _get_firewalls(firewall_name):
+                try:
+                    digitalocean.Firewall(token=E2E_DO_TOKEN, id=firewall["id"]).destroy()
+                except Exception as e:
+                    print(f"TEARDOWN WARNING: could not delete firewall {firewall_name}: {e}", flush=True)
+            try:
+                digitalocean.Tag(token=E2E_DO_TOKEN, name=tag).delete()
+            except Exception as e:
+                print(f"TEARDOWN WARNING: could not delete tag {tag}: {e}", flush=True)
+
+    def test_create_reports_firewall(self, firewalled):
+        assert f"Firewall: {firewalled['firewall_name']}" in firewalled["create_err"]
+
+    def test_firewall_attached_to_type_tag(self, firewalled):
+        firewalls = _get_firewalls(firewalled["firewall_name"])
+        assert len(firewalls) == 1, f"expected one firewall named {firewalled['firewall_name']}, got {len(firewalls)}"
+        assert firewalls[0]["tags"] == [firewalled["tag"]]
+        assert firewalled["tag"] in firewalled["vm"]["tags"]
+
+    def test_firewall_rules(self, firewalled):
+        firewall = _get_firewalls(firewalled["firewall_name"])[0]
+        assert _rules(firewall["inbound_rules"], "sources") == _rules(
+            [{"protocol": "tcp", "ports": "22", "sources": {"addresses": firewalled["allowed"]}}], "sources"
+        )
+        everywhere = {"addresses": ["0.0.0.0/0", "::/0"]}
+        assert _rules(firewall["outbound_rules"], "destinations") == _rules(
+            [
+                {"protocol": "tcp", "ports": "443", "destinations": everywhere},
+                {"protocol": "udp", "ports": "53", "destinations": everywhere},
+            ],
+            "destinations",
+        )
+
+    def test_allowed_source_reaches_ssh(self, firewalled):
+        assert _wait_for_port(firewalled["vm"]["ip"], 22, answers=True, timeout=300), (
+            f"port 22 on {firewalled['vm']['ip']} never answered this host"
+        )
+
+    def test_changed_rules_apply_to_existing_machines(self, firewalled, session_id):
+        """Creating another machine of the type with only a source this host
+        isn't in replaces the rules, and the first machine stops answering."""
+        _write_firewall_config(firewalled["config_path"], firewalled["type"], ["192.0.2.0/24"])
+        vm, _ = _create_firewalled_machine(firewalled["config_path"], firewalled["type"], session_id)
+        firewalled["vm_ids"].append(vm["id"])
+
+        firewalls = _get_firewalls(firewalled["firewall_name"])
+        assert len(firewalls) == 1, f"expected the firewall to be updated, got {len(firewalls)} firewalls"
+        assert _rules(firewalls[0]["inbound_rules"], "sources") == _rules(
+            [{"protocol": "tcp", "ports": "22", "sources": {"addresses": ["192.0.2.0/24"]}}], "sources"
+        )
+        assert _wait_for_port(firewalled["vm"]["ip"], 22, answers=False, timeout=180), (
+            f"port 22 on {firewalled['vm']['ip']} still answers after the rules changed"
+        )
 
 
 # ---------------------------------------------------------------------------

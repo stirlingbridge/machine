@@ -33,9 +33,24 @@ class MainCmdCtx:
 
 
 @dataclass
+class FirewallRule:
+    protocol: str
+    ports: str
+    addresses: list
+
+
+@dataclass
+class FirewallConfig:
+    inbound: list
+    # None means outbound rules were not specified: all outbound traffic is allowed
+    outbound: list
+
+
+@dataclass
 class MachineConfig:
     new_user_name: str
     script_url: str
     script_dir: str
     script_path: str
     script_args: "str | list"
+    firewall: FirewallConfig = None
