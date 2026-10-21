@@ -205,13 +205,15 @@ class DigitalOceanProvider(CloudProvider):
                 _ALLOW_ALL_OUTBOUND if firewall.outbound is None else _firewall_rules(firewall.outbound, "destinations")
             ),
         }
-        existing = next((f for f in self._manager.get_all_firewalls() if f.name == name), None)
         try:
+            # Not get_all_firewalls(), whose rule objects reject fields the API has since added
+            firewalls = self._manager.get_data("firewalls")["firewalls"]
+            existing = next((f for f in firewalls if f["name"] == name), None)
             if existing:
                 # PUT replaces the whole firewall, so carry over anything else it's attached to
-                params["tags"] = sorted(set((existing.tags or []) + [tag]))
-                params["droplet_ids"] = existing.droplet_ids or []
-                self._manager.get_data(f"firewalls/{existing.id}", type=PUT, params=params)
+                params["tags"] = sorted(set((existing["tags"] or []) + [tag]))
+                params["droplet_ids"] = existing["droplet_ids"] or []
+                self._manager.get_data(f"firewalls/{existing['id']}", type=PUT, params=params)
             else:
                 self._manager.get_data("firewalls", type=POST, params=params)
         except digitalocean.DataReadError as e:

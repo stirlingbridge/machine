@@ -1,10 +1,10 @@
 """Tests for machine-type firewall config parsing and the DigitalOcean
 firewall implementation."""
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
-from digitalocean.baseapi import POST, PUT
+from digitalocean.baseapi import GET, POST, PUT
 
 from machine.config import _get_firewall
 from machine.factory import yaml
@@ -98,7 +98,11 @@ def _provider(existing_firewalls=()):
     with patch("machine.providers.digitalocean.digitalocean.Manager") as manager_class:
         provider = DigitalOceanProvider({"access-token": "token"})
     manager = manager_class.return_value
-    manager.get_all_firewalls.return_value = list(existing_firewalls)
+
+    def get_data(url, type=GET, params=None):
+        return {"firewalls": list(existing_firewalls)} if (url, type) == ("firewalls", GET) else {}
+
+    manager.get_data.side_effect = get_data
     return provider, manager
 
 
@@ -120,7 +124,7 @@ class TestDigitalOceanApplyFirewall:
         assert name == "machine-acme"
         tag_class.assert_called_once_with(token="token", name="machine:type:acme")
         tag_class.return_value.create.assert_called_once()
-        manager.get_data.assert_called_once_with(
+        manager.get_data.assert_called_with(
             "firewalls",
             type=POST,
             params={
@@ -136,8 +140,15 @@ class TestDigitalOceanApplyFirewall:
 
     @patch("machine.providers.digitalocean.digitalocean.Tag")
     def test_updates_existing_firewall_preserving_attachments(self, tag_class):
-        existing = MagicMock(id="fw-1", tags=["other-tag"], droplet_ids=[42])
-        existing.name = "machine-acme"
+        # As the API returns it, including the rule fields python-digitalocean's own
+        # Firewall objects reject
+        existing = {
+            "id": "fw-1",
+            "name": "machine-acme",
+            "tags": ["other-tag"],
+            "droplet_ids": [42],
+            "inbound_rules": [{"protocol": "tcp", "ports": "22", "sources": {"addresses": ["0.0.0.0/0"]}, "action": "allow"}],
+        }
         provider, manager = _provider([existing])
         provider.apply_firewall("machine-acme", "machine:type:acme", _FIREWALL)
 

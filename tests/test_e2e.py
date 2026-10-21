@@ -624,8 +624,7 @@ def _do_manager():
 
 def _get_firewalls(name):
     """The firewalls with this name, as the API returns them."""
-    manager = _do_manager()
-    return [manager.get_data(f"firewalls/{f.id}")["firewall"] for f in manager.get_all_firewalls() if f.name == name]
+    return [f for f in _do_manager().get_data("firewalls")["firewalls"] if f["name"] == name]
 
 
 def _rules(rules, address_key):
