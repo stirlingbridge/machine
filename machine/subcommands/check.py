@@ -68,14 +68,12 @@ def command(context):
         output("  SKIP: Project (not configured)")
 
     # 5. Validate region
-    if cfg.region:
+    for region in cfg.regions:
         try:
-            provider.validate_region(cfg.region)
-            report("Region", True, cfg.region)
+            provider.validate_region(region)
+            report("Region", True, region)
         except SystemExit:
-            report("Region", False, cfg.region)
-    else:
-        output("  SKIP: Region (not configured)")
+            report("Region", False, region)
 
     # 6. Validate image
     if cfg.image:

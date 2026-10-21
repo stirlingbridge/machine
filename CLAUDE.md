@@ -31,6 +31,7 @@ machine/             # Main package
     vultr.py         # Vultr provider
   subcommands/       # Click subcommands (create, destroy, list, status, etc.)
 sh/                  # Shell scripts (build, lint, dev-setup)
+demo/                # VHS tape + recorder for the README animation (docs/images/demo.gif)
 pyproject.toml       # Project metadata and dependencies
 ```
 

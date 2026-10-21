@@ -12,8 +12,7 @@ def _resolve_config_dir():
         return _new_config_dir
     if old_path.exists():
         print(
-            f"Warning: config directory {_old_config_dir} is deprecated, "
-            f"please move it to {_new_config_dir}",
+            f"Warning: config directory {_old_config_dir} is deprecated, please move it to {_new_config_dir}",
             file=sys.stderr,
         )
         return _old_config_dir

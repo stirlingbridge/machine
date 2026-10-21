@@ -3,6 +3,10 @@ CLI utility to create and manage VMs
 
 Supports [DigitalOcean](https://www.digitalocean.com/), [Vultr](https://www.vultr.com/), and [Google Cloud Platform](https://cloud.google.com/) hosting platforms.
 
+![Creating a DigitalOcean droplet with DNS and cloud-init provisioning, checking its status, logging into it, then destroying it — all with machine](./docs/images/demo.gif)
+
+The animation above is a real, unedited run against a live DigitalOcean account; it is recorded by [demo/record-demo.sh](./demo/record-demo.sh).
+
 ## Prerequisites
 
 This project uses [uv](https://docs.astral.sh/uv/) for dependency management and builds.
@@ -89,12 +93,12 @@ machines:
 | `access-token` | Yes | DigitalOcean API access token |
 | `ssh-key` | Yes | Name of an SSH key in your DigitalOcean account to use for new machines, or a list of names (see [Multiple SSH keys](#multiple-ssh-keys)) |
 | `dns-zone` | No | DNS zone for automatic DNS record creation/deletion |
-| `machine-size` | Yes | Default machine size slug (e.g. `s-4vcpu-8gb`) |
+| `machine-size` | Yes | Default machine size slug (e.g. `s-4vcpu-8gb`), or a list of sizes to try in order (see [Multiple regions and sizes](#multiple-regions-and-sizes)) |
 | `image` | Yes | Default image name (e.g. `ubuntu-22-04-x64`) |
-| `region` | Yes | Default region code (e.g. `nyc3`) |
+| `region` | Yes | Default region code (e.g. `nyc3`), or a list of regions to try in order (see [Multiple regions and sizes](#multiple-regions-and-sizes)) |
 | `project` | No | DigitalOcean project name to assign new machines to |
 
-Supported regions: `NYC1`, `NYC3`, `AMS3`, `SFO2`, `SFO3`, `SGP1`, `LON1`, `FRA1`, `TOR1`, `BLR1`, `SYD1`
+Supported regions: `NYC1`, `NYC3`, `AMS3`, `SFO2`, `SFO3`, `SGP1`, `LON1`, `FRA1`, `TOR1`, `BLR1`, `SYD1`, `ATL1`, `RIC1`, `MKC1`, `MEM1`
 
 #### Vultr Config
 
@@ -121,9 +125,9 @@ machines:
 | `api-key` | Yes | Vultr API key (from https://my.vultr.com/settings/#settingsapi) |
 | `ssh-key` | Yes | Name of an SSH key in your Vultr account to use for new machines, or a list of names (see [Multiple SSH keys](#multiple-ssh-keys)) |
 | `dns-zone` | No | DNS zone for automatic DNS record creation/deletion |
-| `machine-size` | Yes | Vultr plan slug (e.g. `vc2-1c-1gb`). Use `machine list-plans` or the Vultr API to list available plans |
+| `machine-size` | Yes | Vultr plan slug (e.g. `vc2-1c-1gb`), or a list of plans to try in order (see [Multiple regions and sizes](#multiple-regions-and-sizes)). Use `machine list-plans` or the Vultr API to list available plans |
 | `image` | Yes | Vultr OS ID (numeric, e.g. `2136` for Ubuntu 24.04). Use `machine list-os` or the Vultr API to list available OS IDs |
-| `region` | Yes | Vultr region code (e.g. `ewr`) |
+| `region` | Yes | Vultr region code (e.g. `ewr`), or a list of regions to try in order (see [Multiple regions and sizes](#multiple-regions-and-sizes)) |
 
 Supported regions: `ewr`, `ord`, `dfw`, `sea`, `lax`, `atl`, `ams`, `lhr`, `fra`, `sjc`, `syd`, `nrt`, `cdg`, `icn`, `mia`, `sgp`, `sto`, `mex`, `mad`, `sao`, `del`, `hnl`, `yto`, `blr`, `jnb`, `bom`, `tlv`
 
@@ -148,9 +152,9 @@ gcp:
 | `credentials-file` | No | Path to a service account JSON key file. If omitted, [Application Default Credentials](https://cloud.google.com/docs/authentication/application-default-credentials) are used (e.g. from `gcloud auth application-default login`) |
 | `ssh-key` | Yes | Username GCP associates with an SSH key in the project's `ssh-keys` metadata (see SSH key notes below), or a list of usernames (see [Multiple SSH keys](#multiple-ssh-keys)) |
 | `dns-zone` | No | DNS name of a [Cloud DNS](https://cloud.google.com/dns) managed zone (e.g. `example.com`) |
-| `machine-size` | Yes | GCE machine type (e.g. `e2-standard-2`) |
+| `machine-size` | Yes | GCE machine type (e.g. `e2-standard-2`), or a list of machine types to try in order (see [Multiple regions and sizes](#multiple-regions-and-sizes)) |
 | `image` | Yes | Image self-link or family path (e.g. `projects/debian-cloud/global/images/family/debian-12`) |
-| `region` | Yes | GCE *zone* (e.g. `us-central1-a`). Despite the key name, GCP requires a fully-qualified zone, not a region |
+| `region` | Yes | GCE *zone* (e.g. `us-central1-a`). Despite the key name, GCP requires a fully-qualified zone, not a region. A list of zones to try in order is also accepted (see [Multiple regions and sizes](#multiple-regions-and-sizes)) |
 
 **Authentication:**
 
@@ -195,10 +199,21 @@ Each entry under `machines:` defines a machine type that can be referenced with 
 | `script-url` | No | URL to download an initialization script from |
 | `script-dir` | No | Directory to store the initialization script |
 | `script-path` | No | Full path for the initialization script |
-| `script-args` | No | Arguments passed to the initialization script (supports variable expansion) |
+| `script-args` | No | Arguments passed to the initialization script (supports variable expansion). Either a single string, or a list where each item is passed to the script as exactly one shell argument |
 | `firewall` | No | Cloud firewall rules applied to machines of this type (DigitalOcean only, see [Firewalls](#firewalls)) |
 
-If `script-url`, `script-dir`, and `script-path` are all provided, the script is downloaded and executed as the new user during cloud-init. The following variables are available for expansion in `script-args`:
+If `script-url`, `script-dir`, and `script-path` are all provided, the script is downloaded and executed as the new user during cloud-init.
+
+When `script-args` is a list, each item reaches the script as one argument regardless of any spaces it contains. This composes well with runner scripts such as [combine.sh](https://github.com/stirlingbridge/machine-provisioning), which accepts one `"<script> [args...]"` entry per script to run:
+
+```yaml
+        script-args:
+          - packages.sh build-essential
+          - podman.sh
+          - k3s-node.sh -y --letsencrypt-email user@example.com
+```
+
+The following variables are available for expansion in `script-args` (both forms):
 
 - `$MACHINE_SCRIPT_URL` — URL of the initialization script
 - `$MACHINE_SCRIPT_DIR` — directory path for the script
@@ -264,6 +279,28 @@ The single-name form is unchanged and remains fully supported:
 ```yaml
     ssh-key: my-ssh-key-name
 ```
+
+#### Multiple regions and sizes
+
+Providers sometimes run out of a machine size in a region for a while (a "stockout"), or stop offering it there. To ride that out, the `region` and `machine-size` config values each accept a list in order of preference, and `create` makes the machine in the first region, with the first size, that has capacity:
+
+```yaml
+digital-ocean:
+    access-token: ${DO_API_TOKEN}
+    ssh-key: my-ssh-key-name
+    machine-size:
+        - s-4vcpu-8gb
+        - s-4vcpu-8gb-intel
+    image: ubuntu-22-04-x64
+    region:
+        - nyc3
+        - nyc1
+        - tor1
+```
+
+Every size is tried in a region before moving on to the next region, since where a machine runs usually matters more than which of several equivalent sizes it gets. Before creating, `machine` asks the provider which combinations it currently offers (DigitalOcean and Vultr can say; GCP can't) and tries the ones it doesn't last, in case the answer is out of date. If the create itself fails because the provider is out of capacity, the next combination is tried; any other error stops there. The region and size used are printed, and are in the `--output json` result. Only list regions and sizes you would be equally happy with: a machine in a different region has different latency to whatever it talks to.
+
+`--region` and `--machine-size` can each be given more than once on the command line to override the lists for one machine.
 
 #### Environment Variable Substitution
 
@@ -361,11 +398,15 @@ Options:
   -n, --name <MACHINE-NAME>         Name for new machine  [required]
   -t, --tag <TAG-TEXT>              Tag to be applied to new machine
   -m, --type <MACHINE-TYPE>        Machine type from config (required if --initialize)
-  -r, --region <REGION-CODE>       Region (overrides config default)
+  -r, --region <REGION-CODE>       Region (overrides config default); repeat to
+                                    give regions to try in order
   -s, --machine-size <MACHINE-SLUG>
-                                    Machine size (overrides config default)
-  -s, --image <IMAGE-NAME>         Image (overrides config default)
+                                    Machine size (overrides config default);
+                                    repeat to give sizes to try in order
+  -i, --image <IMAGE-NAME>         Image (overrides config default)
   --wait-for-ip / --no-wait-for-ip Wait for IP address assignment (default: off)
+  --progress / --no-progress       Animate a progress indicator while waiting
+                                    for the IP address (default: off)
   --update-dns / --no-update-dns   Create DNS A record (default: on)
   --initialize / --no-initialize   Initialize with cloud-init (default: on)
   -o, --output <FORMAT>            Output format (json)
@@ -374,7 +415,7 @@ Options:
 
 Output formats:
 - Default: human-readable status messages
-- `--output json`: JSON object with id, name, tags, region, ip, type
+- `--output json`: JSON object with id, name, tags, region, size, ip, type
 
 JSON output example:
 ```json
@@ -383,12 +424,15 @@ JSON output example:
   "name": "my-machine",
   "tags": ["machine:created", "machine:type:example", "machine:session:abc12345"],
   "region": "nyc3",
+  "size": "s-4vcpu-8gb",
   "ip": "203.0.113.10",
   "type": "example"
 }
 ```
 
 When `--update-dns` is enabled (the default), the command waits for the instance's IP address and creates an A record in the configured `dns-zone` with a 5-minute TTL.
+
+That wait takes tens of seconds and is silent by default. `--progress` animates a spinner with an elapsed-second count on stderr for the duration, so an interactive run does not look like it has hung. It is ignored when stderr is not a terminal, and `--verbose` (which reports the same wait in words) takes precedence over it, so scripted and piped output is unaffected either way.
 
 When `--initialize` is enabled (the default), a cloud-config user-data payload is generated that creates a non-root user with sudo access, installs the configured SSH key(s), and optionally downloads and runs an initialization script.
 
@@ -452,6 +496,7 @@ JSON output example:
     "name": "my-machine",
     "tags": ["machine:created", "machine:type:example", "machine:session:abc12345"],
     "region": "nyc3",
+    "size": "s-4vcpu-8gb",
     "ip": "203.0.113.10",
     "type": "example"
   }
@@ -535,6 +580,7 @@ JSON output example:
       "name": "my-machine",
       "tags": ["machine:created"],
       "region": "nyc3",
+      "size": "s-4vcpu-8gb",
       "ip": "203.0.113.10",
       "type": "example"
     },

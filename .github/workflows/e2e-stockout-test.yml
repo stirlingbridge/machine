@@ -1,0 +1,54 @@
+name: E2E Region Fallback Test
+
+# Creating a machine in the next region when the provider is out of capacity in
+# one. Run by hand rather than on every push: it hunts for a region that
+# doesn't offer the size, which is slow-ish and depends on what the provider
+# offers on the day.
+on:
+  workflow_dispatch:
+    inputs:
+      provider:
+        description: "Provider"
+        type: choice
+        options: [digital-ocean, vultr]
+        default: digital-ocean
+      stockout-region:
+        description: "Region with no capacity for the size (blank: find one)"
+        type: string
+        required: false
+      size:
+        description: "Machine size (blank: the e2e default)"
+        type: string
+        required: false
+
+jobs:
+  e2e-stockout:
+    name: "E2E Region Fallback (${{ inputs.provider }})"
+    runs-on: ubuntu-latest
+    environment: e2e
+    permissions:
+      contents: read
+    steps:
+      - name: "Clone project repository"
+        uses: actions/checkout@v6
+      - name: "Install uv"
+        uses: astral-sh/setup-uv@v7
+      - name: "Install Python"
+        run: uv python install 3.13
+      - name: "Install dependencies"
+        run: uv sync
+      - name: "Run region fallback tests"
+        env:
+          E2E_PROVIDER: ${{ inputs.provider }}
+          E2E_STOCKOUT: "1"
+          E2E_STOCKOUT_REGION: ${{ inputs.stockout-region }}
+          E2E_SIZE: ${{ inputs.size }}
+          E2E_SSH_KEY: ${{ vars.E2E_SSH_KEY }}
+          # DigitalOcean credentials
+          E2E_DO_TOKEN: ${{ secrets.E2E_DO_TOKEN }}
+          E2E_DO_DNS_ZONE: ${{ vars.E2E_DO_DNS_ZONE }}
+          E2E_PROJECT: ${{ vars.E2E_PROJECT }}
+          # Vultr credentials
+          E2E_VULTR_API_KEY: ${{ secrets.E2E_VULTR_API_KEY }}
+          E2E_VULTR_DNS_ZONE: ${{ vars.E2E_VULTR_DNS_ZONE }}
+        run: uv run pytest tests/test_e2e.py -v -m e2e -k TestRegionFallback

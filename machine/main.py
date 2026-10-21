@@ -1,4 +1,6 @@
+import json
 import os
+from importlib import metadata
 
 import click
 
@@ -37,6 +39,20 @@ def main(context, debug, quiet, verbose, dry_run, config_file, session_id):
     context.obj = main_context
 
 
+def _installed_commit_hash():
+    # When installed from a git URL (e.g. uv tool install git+https://...),
+    # PEP 610 direct_url.json in the dist-info records the source commit.
+    try:
+        direct_url_text = metadata.distribution("machine").read_text("direct_url.json")
+        if direct_url_text:
+            commit_id = json.loads(direct_url_text).get("vcs_info", {}).get("commit_id")
+            if commit_id:
+                return commit_id[:7]
+    except Exception:
+        pass
+    return None
+
+
 @main.command()
 @click.pass_context
 def version(context):
@@ -45,7 +61,8 @@ def version(context):
         with open(version_file) as f:
             version_string = f.read().strip()
     except FileNotFoundError:
-        version_string = "dev"
+        commit_hash = _installed_commit_hash()
+        version_string = metadata.version("machine") + "-" + (commit_hash if commit_hash else "unknown")
     output(version_string)
 
 

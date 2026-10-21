@@ -4,15 +4,26 @@ import time
 from vultr import Vultr, VultrException
 
 from machine.log import fatal_error, info
-from machine.provider import CloudProvider, VM, SSHKey, DNSRecord
+from machine.provider import CloudProvider, CapacityUnavailableError, VM, SSHKey, DNSRecord
 
 
+# fmt: off
+# Kept as a grid rather than one region per line, which is how it reads on
+# Vultr's own region list and keeps the whole set visible at a glance.
 VALID_REGIONS = [
     "ewr", "ord", "dfw", "sea", "lax", "atl", "ams", "lhr", "fra",
     "sjc", "syd", "nrt", "cdg", "icn", "mia", "sgp", "sto",
     "mex", "mad", "sao", "del", "hnl", "yto", "blr", "jnb",
     "bom", "tlv",
 ]
+# fmt: on
+
+# Overall budget for destroy_vm, and for confirming a single accepted delete.
+# The overall budget stays well inside the callers' expectations of a command
+# that finishes in a few minutes.
+DESTROY_TIMEOUT = 240
+DESTROY_CONFIRM_TIMEOUT = 60
+DESTROY_POLL_INTERVAL = 5
 
 
 def _instance_to_vm(instance) -> VM:
@@ -23,6 +34,7 @@ def _instance_to_vm(instance) -> VM:
         region=instance.get("region", ""),
         ip_address=instance.get("main_ip", ""),
         status=instance.get("status", ""),
+        size=instance.get("plan", ""),
     )
 
 
@@ -56,6 +68,10 @@ class VultrProvider(CloudProvider):
         try:
             result = self._client.create_instance(region, size, **kwargs)
         except VultrException as e:
+            # Vultr's wording for a stockout isn't known, so ask whether the
+            # plan is still offered in the region instead.
+            if self.has_capacity(region, size) is False:
+                raise CapacityUnavailableError(f"Vultr has no capacity for plan {size} in region {region}: {e}")
             fatal_error(f"Error creating instance: {e}")
 
         return _instance_to_vm(result)
@@ -68,23 +84,50 @@ class VultrProvider(CloudProvider):
         return _instance_to_vm(result)
 
     def destroy_vm(self, vm_id) -> bool:
-        # Vultr returns HTTP 500 if the instance is still pending or locked
-        # (e.g. during provisioning). Retry deletion with backoff.
-        for attempt in range(24):
+        # Vultr will not delete an instance that is still provisioning. It has
+        # signalled that in several ways over time (HTTP 500 "not currently
+        # active", HTTP 400 "currently locked", and — worst of all — by
+        # accepting the DELETE and then not acting on it), so retry on anything
+        # that is not a definitive answer, and confirm the instance really went
+        # away before reporting success.
+        deadline = time.monotonic() + DESTROY_TIMEOUT
+        last_error = None
+        while time.monotonic() < deadline:
             try:
                 self._client.delete_instance(vm_id)
-                return True
             except VultrException as e:
-                error_msg = str(e)
-                if "500" in error_msg and ("not currently active" in error_msg or "currently locked" in error_msg):
-                    info("Waiting for instance to become ready before destroying...")
-                    time.sleep(5)
-                elif "404" in error_msg:
+                if e.status == 404:
                     return True  # already gone
-                else:
-                    fatal_error(f"Error: machine with id {vm_id} not found: {e}")
-        fatal_error(f"Error: timed out waiting to destroy instance {vm_id}")
+                if e.status in (401, 403):
+                    fatal_error(f"Error destroying machine with id {vm_id}: {e}")
+                last_error = e
+                info("Waiting for instance to become ready before destroying...")
+                time.sleep(DESTROY_POLL_INTERVAL)
+                continue
+
+            if self._instance_is_gone(vm_id):
+                return True
+            info("Instance still present after delete was accepted, retrying...")
+            time.sleep(DESTROY_POLL_INTERVAL)
+
+        if last_error:
+            fatal_error(f"Error: timed out destroying instance {vm_id}: {last_error}")
+        fatal_error(f"Error: timed out waiting for instance {vm_id} to be destroyed")
         return False
+
+    def _instance_is_gone(self, vm_id) -> bool:
+        """Poll the instance until the API reports it no longer exists."""
+        deadline = time.monotonic() + DESTROY_CONFIRM_TIMEOUT
+        while True:
+            try:
+                self._client.get_instance(vm_id)
+            except VultrException as e:
+                if e.status == 404:
+                    return True
+                raise
+            if time.monotonic() >= deadline:
+                return False
+            time.sleep(DESTROY_POLL_INTERVAL)
 
     def list_vms(self, tag=None) -> list:
         try:
@@ -124,7 +167,10 @@ class VultrProvider(CloudProvider):
         try:
             result = self._client.post(
                 f"/domains/{zone}/records",
-                type=record_type, name=name, data=data, ttl=ttl,
+                type=record_type,
+                name=name,
+                data=data,
+                ttl=ttl,
             )
         except VultrException:
             info(f"Warning: DNS zone '{zone}' not found in Vultr, DNS record not set")
@@ -172,6 +218,16 @@ class VultrProvider(CloudProvider):
     def validate_region(self, region):
         if region is not None and region.lower() not in VALID_REGIONS:
             fatal_error(f"Error: region {region} is not one of {VALID_REGIONS}")
+
+    def has_capacity(self, region, size):
+        try:
+            result = self._client.get(f"/regions/{region}/availability")
+        except VultrException:
+            return None
+        plans = result.get("available_plans") if isinstance(result, dict) else None
+        if plans is None:
+            return None
+        return size in plans
 
     def validate_image(self, image):
         try:

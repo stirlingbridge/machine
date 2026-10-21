@@ -4,7 +4,8 @@ import time
 
 from machine.config import get_machine, has_machine
 from machine.di import d
-from machine.log import fatal_error, info, debug, output as log_output
+from machine.log import Spinner, fatal_error, info, debug, output as log_output
+from machine.provider import CapacityUnavailableError
 from machine.types import MainCmdCtx, TAG_MACHINE_CREATED, TAG_MACHINE_TYPE_PREFIX
 from machine.cloud_config import get_user_data
 from machine.util import vm_to_json_obj
@@ -46,21 +47,67 @@ def _apply_firewall(provider, type, machine_config):
         info(f"Firewall: {firewall_name}")
 
 
+def _order_by_capacity(provider, choices):
+    """Move the (region, size) choices the provider says have no capacity to
+    the end, keeping the order of preference otherwise. They are still tried
+    last, in case the provider's answer is out of date."""
+    if len(choices) < 2:
+        return choices
+    full = [c for c in choices if provider.has_capacity(*c) is False]
+    for region, size in full:
+        info(f"Region {region} reports no capacity for size {size}, trying it last")
+    return [c for c in choices if c not in full] + full
+
+
+def _create_with_first_available(provider, regions, sizes, **create_args):
+    """Create the VM in the first of `regions`, with the first of `sizes`, that
+    the provider has capacity for. Every size is tried in a region before the
+    next region: where a machine runs usually matters more than its exact size."""
+    choices = [(region, size) for region in regions for size in sizes]
+    for region, size in _order_by_capacity(provider, choices):
+        try:
+            vm = provider.create_vm(region=region, size=size, **create_args)
+        except CapacityUnavailableError as e:
+            info(str(e))
+            continue
+        if len(regions) > 1 and not d.opt.quiet:
+            info(f"Region: {region}")
+        if len(sizes) > 1 and not d.opt.quiet:
+            info(f"Size: {size}")
+        return vm
+    fatal_error(f"Error: no capacity for size {', '.join(sizes)} in any region tried: {', '.join(regions)}")
+
+
 @click.command(help="Create a machine")
 @click.option("--name", "-n", required=True, metavar="<MACHINE-NAME>", help="Name for new machine")
 @click.option("--tag", "-t", metavar="<TAG-TEXT>", help="tag to be applied to new machine")
 @click.option("--type", "-m", metavar="<MACHINE-TYPE>", help="create a machine of this type")
-@click.option("--region", "-r", metavar="<REGION-CODE>", help="create a machine in this region (overrides default from config)")
 @click.option(
-    "--machine-size", "-s", metavar="<MACHINE-SLUG>", help="create a machine of this size (overrides default from config)"
+    "--region",
+    "-r",
+    metavar="<REGION-CODE>",
+    multiple=True,
+    help="create a machine in this region (overrides default from config); repeat to give regions to try in order",
 )
-@click.option("--image", "-s", metavar="<IMAGE-NAME>", help="create a machine from this image (overrides default from config)")
-@click.option("--wait-for-ip/--no-wait-for-up", default=False)
+@click.option(
+    "--machine-size",
+    "-s",
+    metavar="<MACHINE-SLUG>",
+    multiple=True,
+    help="create a machine of this size (overrides default from config); repeat to give sizes to try in order",
+)
+@click.option("--image", "-i", metavar="<IMAGE-NAME>", help="create a machine from this image (overrides default from config)")
+@click.option("--wait-for-ip/--no-wait-for-ip", default=False)
+@click.option(
+    "--progress/--no-progress",
+    default=False,
+    help="Animate a progress indicator while waiting for the machine's IP address",
+)
 @click.option("--update-dns/--no-update-dns", default=True)
 @click.option("--initialize/--no-initialize", default=True)
 @click.option("--output", "-o", metavar="<FORMAT>", help="Output format")
 @click.pass_context
-def command(context, name, tag, type, region, machine_size, image, wait_for_ip, update_dns, initialize, output):
+def command(context, name, tag, type, region, machine_size, image, wait_for_ip, progress, update_dns, initialize, output):
     command_context: MainCmdCtx = context.obj
     config = command_context.config
     provider = command_context.provider
@@ -84,7 +131,14 @@ def command(context, name, tag, type, region, machine_size, image, wait_for_ip, 
     # Verify SSH keys exist
     _verify_ssh_keys(provider, config.ssh_keys)
 
-    provider.validate_region(region)
+    # Validate what will actually be used, not just what was passed on the
+    # command line, so that a bad value in the config file is caught too.
+    regions = list(region) if region else config.regions
+    image = image if image is not None else config.image
+    sizes = list(machine_size) if machine_size else config.machine_sizes
+
+    for r in regions:
+        provider.validate_region(r)
     provider.validate_image(image)
 
     tags = [
@@ -94,17 +148,19 @@ def command(context, name, tag, type, region, machine_size, image, wait_for_ip, 
     if type:
         tags.append(TAG_MACHINE_TYPE_PREFIX + type.lower())
 
-    # Apply the firewall before the machine exists, so it is protected from first boot
-    if machine_config and machine_config.firewall:
-        _apply_firewall(provider, type, machine_config)
     if tag:
         tags.append(tag)
 
-    vm = provider.create_vm(
+    # Apply the firewall before the machine exists, so it is protected from first boot
+    if machine_config and machine_config.firewall:
+        _apply_firewall(provider, type, machine_config)
+
+    vm = _create_with_first_available(
+        provider,
+        regions,
+        sizes,
         name=name,
-        region=region if region is not None else config.region,
-        image=image if image is not None else config.image,
-        size=machine_size if machine_size is not None else config.machine_size,
+        image=image,
         ssh_key_names=config.ssh_keys,
         tags=tags,
         user_data=user_data,
@@ -128,12 +184,16 @@ def command(context, name, tag, type, region, machine_size, image, wait_for_ip, 
     # so treat that the same as no IP assigned yet.
     ip_address = vm.ip_address if vm.ip_address != "0.0.0.0" else None
     if (wait_for_ip or update_dns) and not ip_address:
-        while not ip_address:
-            time.sleep(1)
-            vm = provider.get_vm(vm.id)
-            ip_address = vm.ip_address if vm.ip_address != "0.0.0.0" else None
-            if d.opt.verbose:
-                log_output("Waiting for machine IP address")
+        # The spinner and the --verbose progress lines would overwrite each
+        # other, so --verbose (which says what is happening in words) wins.
+        show_spinner = progress and not d.opt.verbose and not d.opt.quiet
+        with Spinner("Waiting for machine IP address", enabled=show_spinner):
+            while not ip_address:
+                time.sleep(1)
+                vm = provider.get_vm(vm.id)
+                ip_address = vm.ip_address if vm.ip_address != "0.0.0.0" else None
+                if d.opt.verbose:
+                    log_output("Waiting for machine IP address")
         if d.opt.quiet:
             info(f"{ip_address}")
         else:

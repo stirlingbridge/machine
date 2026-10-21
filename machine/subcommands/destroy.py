@@ -32,9 +32,7 @@ def command(context, confirm, delete_dns, all, machine_ids):
             fatal_error(f'ERROR: Cannot destroy machine "{name}" (id: {vm.id}), it was not created by this tool.')
 
         if not is_same_session(command_context, vm) and not all:
-            fatal_error(
-                f'ERROR: Cannot destroy machine "{name}" (id: {vm.id}), it was created by a different session.'
-            )
+            fatal_error(f'ERROR: Cannot destroy machine "{name}" (id: {vm.id}), it was created by a different session.')
 
         if confirm:
             output(

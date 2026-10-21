@@ -25,8 +25,16 @@ class FakeProvider:
         return SSHKey(id=name, name=name, fingerprint="", public_key=public_key)
 
 
-def _machine_config():
-    return MachineConfig("admin", None, None, None, None)
+def _machine_config(script_args=None):
+    if script_args is None:
+        return MachineConfig("admin", None, None, None, None)
+    return MachineConfig(
+        "admin",
+        "https://example.com/scripts/combine.sh",
+        "/opt/admin",
+        "/opt/admin/combine.sh",
+        script_args,
+    )
 
 
 def _authorized_keys(user_data):
@@ -60,3 +68,45 @@ class TestGetUserData:
         """A key name the provider cannot resolve aborts with a clear error."""
         with pytest.raises(SystemExit):
             get_user_data(FakeProvider(), ["alice", "ghost"], "", _machine_config())
+
+
+def _run_command(user_data):
+    """Parse generated user-data and return the shell command string passed to su -c."""
+    parsed = yaml().load(user_data)
+    su_cmd = parsed["runcmd"][-1]
+    assert su_cmd[0] == "su"
+    return su_cmd[2]
+
+
+class TestScriptArgs:
+    def test_string_args_passed_verbatim(self):
+        """The legacy string form is interpolated into the command unchanged."""
+        user_data = get_user_data(FakeProvider(), ["alice"], "", _machine_config("-y --flag value"))
+        assert _run_command(user_data).endswith("/opt/admin/combine.sh -y --flag value")
+
+    def test_list_args_quoted_one_argument_per_item(self):
+        """Each list item becomes exactly one shell argument, spaces and all."""
+        user_data = get_user_data(
+            FakeProvider(),
+            ["alice"],
+            "",
+            _machine_config(["packages.sh build-essential jq", "podman.sh"]),
+        )
+        assert _run_command(user_data).endswith(
+            "/opt/admin/combine.sh 'packages.sh build-essential jq' podman.sh"
+        )
+
+    def test_list_args_expand_variables(self):
+        """$MACHINE_* variables expand inside list items, like in the string form."""
+        user_data = get_user_data(
+            FakeProvider(), ["alice"], "host.example.com", _machine_config(["fqdn.sh $MACHINE_FQDN"])
+        )
+        assert _run_command(user_data).endswith("/opt/admin/combine.sh 'fqdn.sh host.example.com'")
+
+    def test_list_args_user_data_is_valid_yaml(self):
+        """List-form args must survive the YAML round trip cloud-init performs."""
+        user_data = get_user_data(
+            FakeProvider(), ["alice"], "", _machine_config(["k3s-node.sh -y --msg 'a b'"])
+        )
+        cmd = _run_command(user_data)
+        assert "k3s-node.sh -y --msg" in cmd

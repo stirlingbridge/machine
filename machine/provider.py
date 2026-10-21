@@ -13,6 +13,7 @@ class VM:
     region: str
     ip_address: str
     status: str
+    size: str = ""
 
 
 @dataclass
@@ -30,6 +31,13 @@ class DNSRecord:
     type: str
     data: str
     ttl: int
+
+
+class CapacityUnavailableError(Exception):
+    """The provider has no capacity for the requested size in the requested
+    region right now (a stockout), as opposed to anything being wrong with the
+    request. Raised by create_vm only when no VM was created, so the caller can
+    safely try another region."""
 
 
 class CloudProvider(ABC):
@@ -85,6 +93,11 @@ class CloudProvider(ABC):
 
     def validate_region(self, region):
         pass
+
+    def has_capacity(self, region, size):
+        """Whether the provider currently says `size` can be created in
+        `region`: True or False, or None when it can't tell."""
+        return None
 
     def validate_image(self, image):
         pass

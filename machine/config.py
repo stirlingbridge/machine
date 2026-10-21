@@ -61,19 +61,34 @@ def _require_key(d, key, section_name):
     return d[key]
 
 
-def _get_ssh_keys(provider_config, section_name) -> list:
-    """Read the 'ssh-key' config value, accepting either a single name (a
-    string) or a list of names. Always returns a non-empty list of names."""
-    value = _require_key(provider_config, "ssh-key", section_name)
+def _get_list(provider_config, key, section_name, noun) -> list:
+    """Read a config value that is either a single value (a string) or a list
+    of them. Always returns a non-empty list of strings."""
+    value = _require_key(provider_config, key, section_name)
     if isinstance(value, str):
-        keys = [value]
+        values = [value]
     elif isinstance(value, list):
-        keys = [str(k) for k in value]
+        values = [str(v) for v in value]
     else:
-        fatal_error(f"Config key 'ssh-key' in '{section_name}' section must be a name or a list of names")
-    if not keys:
-        fatal_error(f"Config key 'ssh-key' in '{section_name}' section must specify at least one SSH key")
-    return keys
+        fatal_error(f"Config key '{key}' in '{section_name}' section must be a {noun} or a list of {noun}s")
+    if not values:
+        fatal_error(f"Config key '{key}' in '{section_name}' section must specify at least one {noun}")
+    return values
+
+
+def _get_ssh_keys(provider_config, section_name) -> list:
+    """The 'ssh-key' config value: the names of the keys to install."""
+    return _get_list(provider_config, "ssh-key", section_name, "name")
+
+
+def _get_regions(provider_config, section_name) -> list:
+    """The 'region' config value: the regions to try, in order of preference."""
+    return _get_list(provider_config, "region", section_name, "region")
+
+
+def _get_machine_sizes(provider_config, section_name) -> list:
+    """The 'machine-size' config value: the sizes to try, in order of preference."""
+    return _get_list(provider_config, "machine-size", section_name, "size")
 
 
 _FIREWALL_PROTOCOLS = ("tcp", "udp", "icmp")
@@ -137,13 +152,9 @@ def get(config_file_name: str) -> Config:
     if not provider_name:
         found = [p for p in KNOWN_PROVIDERS if p in config]
         if len(found) == 0:
-            fatal_error(
-                "No provider section found in config file. Expected one of: " + ", ".join(KNOWN_PROVIDERS)
-            )
+            fatal_error("No provider section found in config file. Expected one of: " + ", ".join(KNOWN_PROVIDERS))
         if len(found) > 1:
-            fatal_error(
-                "Multiple provider sections found in config file. Please add a 'provider:' key to select one."
-            )
+            fatal_error("Multiple provider sections found in config file. Please add a 'provider:' key to select one.")
         provider_name = found[0]
 
     if provider_name not in config:
@@ -155,9 +166,9 @@ def get(config_file_name: str) -> Config:
         provider_config=provider_config,
         ssh_keys=_get_ssh_keys(provider_config, provider_name),
         dns_zone=provider_config.get("dns-zone"),
-        machine_size=_require_key(provider_config, "machine-size", provider_name),
+        machine_sizes=_get_machine_sizes(provider_config, provider_name),
         image=_require_key(provider_config, "image", provider_name),
-        region=_require_key(provider_config, "region", provider_name),
+        regions=_get_regions(provider_config, provider_name),
         project=provider_config.get("project"),
     )
 
@@ -172,12 +183,17 @@ def get_machine(name: str) -> MachineConfig:
     if name not in config_machines:
         fatal_error(f"Machine type '{name}' not found in config file. Available types: {', '.join(config_machines.keys())}")
     target_config = config_machines[name]
+    script_args = target_config.get("script-args")
+    if script_args is not None and not isinstance(script_args, (str, list)):
+        fatal_error(f"Config key 'script-args' in 'machines.{name}' must be a string or a list of strings")
+    if isinstance(script_args, list) and not all(isinstance(item, (str, int, float, bool)) for item in script_args):
+        fatal_error(f"Config key 'script-args' in 'machines.{name}' must be a list of scalar values")
     return MachineConfig(
         _require_key(target_config, "new-user-name", f"machines.{name}"),
         target_config.get("script-url"),
         target_config.get("script-dir"),
         target_config.get("script-path"),
-        target_config.get("script-args"),
+        script_args,
         _get_firewall(target_config, f"machines.{name}"),
     )
 

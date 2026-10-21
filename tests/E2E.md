@@ -81,7 +81,7 @@ If you use a service account, it needs at minimum:
 | `E2E_DO_DNS_ZONE` | Yes | DNS zone hosted at DigitalOcean (e.g. `do.example.com`) |
 | `E2E_PROJECT` | Yes | DO project to assign droplets to |
 
-Defaults: region `nyc1`, image `ubuntu-24-04-x64`, size `s-1vcpu-512mb-10gb`
+Defaults: region `nyc1`, image `ubuntu-24-04-x64`, size `s-1vcpu-1gb-intel`
 
 ### Vultr
 
@@ -100,7 +100,9 @@ Defaults: region `ewr`, image `2136` (Ubuntu 24.04), size `vc2-1c-1gb`
 | `E2E_GCP_DNS_ZONE` | Yes | DNS zone hosted in Cloud DNS (e.g. `gcp.example.com`) |
 | `E2E_GCP_CREDENTIALS_FILE` | No | Path to a service account JSON key file. If unset, [Application Default Credentials](https://cloud.google.com/docs/authentication/application-default-credentials) are used |
 
-Defaults: region (zone) `us-central1-a`, image `projects/ubuntu-os-cloud/global/images/family/ubuntu-2404-lts-amd64`, size `e2-micro`
+Defaults: region (zone) `us-east4-c`, image `projects/ubuntu-os-cloud/global/images/family/ubuntu-2404-lts-amd64`, size `e2-small`
+
+The zone and size are deliberately not `us-central1-a` / `e2-micro`: the GCP always-free tier covers one `e2-micro` in `us-central1`, `us-east1` and `us-west1`, making that combination heavily oversubscribed and prone to `ZONE_RESOURCE_POOL_EXHAUSTED` on create.
 
 ## Running
 
@@ -162,6 +164,12 @@ The GitHub Actions workflow (`.github/workflows/e2e-test.yml`) runs e2e tests fo
 
 If credentials for a provider are not configured, that provider's test run will be skipped automatically.
 
+### Region fallback
+
+`TestRegionFallback` checks that `create` moves on to the next configured region when the provider has no capacity for the size in one. It is skipped unless `E2E_STOCKOUT` is set, and runs only from its own workflow (`.github/workflows/e2e-stockout-test.yml`), started by hand from the Actions tab, for DigitalOcean or Vultr (GCP can't say which zones have capacity).
+
+A real stockout can't be arranged, so a region that doesn't offer the size stands in for one: the provider refuses a create there the same way. By default the test asks the provider for such a region and skips if there isn't one; the workflow's `stockout-region` and `size` inputs (`E2E_STOCKOUT_REGION`, `E2E_SIZE`) choose one by hand. It creates one machine, in `E2E_REGION`, and destroys it.
+
 ## What's Tested
 
 - **Instance lifecycle** — create, list, destroy
@@ -172,6 +180,8 @@ If credentials for a provider are not configured, that provider's test run will 
 ## Cleanup
 
 Each test cleans up after itself. All test instances use unique names prefixed with `e2etest-` so they are easy to identify.
+
+A module-scoped `leak_check` fixture runs last and lists everything still tagged with the run's session id. Anything it finds is destroyed and then reported as a test failure — a leaked VM is a bug, not a warning, because a silent one accumulates until the provider's instance limit is reached (issue #102).
 
 ## Cost
 

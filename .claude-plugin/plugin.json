@@ -1,0 +1,13 @@
+{
+  "name": "stirlingbridge-machine",
+  "displayName": "Stirlingbridge Machine",
+  "description": "Agent skills for creating and managing cloud VMs on DigitalOcean, Vultr, and Google Cloud Platform with the machine CLI",
+  "author": {
+    "name": "Stirlingbridge",
+    "url": "https://github.com/stirlingbridge"
+  },
+  "homepage": "https://github.com/stirlingbridge/machine",
+  "repository": "https://github.com/stirlingbridge/machine",
+  "license": "AGPL-3.0",
+  "keywords": ["vm", "virtual-machine", "cloud", "digitalocean", "vultr", "gcp", "provisioning", "cloud-init"]
+}
